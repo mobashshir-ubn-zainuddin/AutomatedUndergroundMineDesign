@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MineOptima — Automated Underground Mine Design</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar" id="navbar">
+  <a href="#hero" class="nav-logo">
+    <span class="icon">⛏</span>
+    <span>MineOptima</span>
+  </a>
+  <ul class="nav-links" id="navLinks">
+    <li><a href="#hero">Home</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#comparison">Traditional vs Modern</a></li>
+    <li><a href="#app" class="btn btn-sm btn-primary">Launch App</a></li>
+  </ul>
+  <button class="nav-mobile-toggle" onclick="document.getElementById('navLinks').classList.toggle('open')">☰</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      Research Prototype
+    </div>
+    <h1>
+      Next-Generation<br>
+      <span class="gradient-text">Underground Mine Design</span>
+    </h1>
+    <p class="hero-desc">
+      An integrated computational platform that combines Operations Research, Machine Learning,
+      and Monte Carlo simulation to automate underground stope layout optimization — replacing weeks
+      of manual design iteration with a 60-second intelligent pipeline.
+    </p>
+    <div class="hero-actions">
+      <a href="#app" class="btn btn-primary">Launch Dashboard →</a>
+      <a href="#features" class="btn btn-outline">Explore Features</a>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats-strip">
+  <div class="stat-item"><div class="num">24,000</div><div class="label">Blocks Modeled</div></div>
+  <div class="stat-item"><div class="num">3,358</div><div class="label">Candidate Stopes</div></div>
+  <div class="stat-item"><div class="num">$380M</div><div class="label">Optimized Value</div></div>
+  <div class="stat-item"><div class="num">0.978</div><div class="label">ML Accuracy (R²)</div></div>
+  <div class="stat-item"><div class="num">95.8%</div><div class="label">P(NPV > 0)</div></div>
+</div>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="section-header">
+      <h2>Powered by Advanced Technologies</h2>
+      <p>Seven integrated modules that transform raw geological data into an optimized, risk-assessed mine design — all in a single platform.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon blue">📊</div>
+        <h3>Synthetic Block Model</h3>
+        <p>Generates geologically realistic 3D block models with two ore zones using Gaussian distance functions and spatially correlated grade fields — mimicking real deposit geometry and grade continuity.</p>
+        <span class="tech-tag">NumPy</span><span class="tech-tag">SciPy</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon amber">💰</div>
+        <h3>Economic Evaluation</h3>
+        <p>Classifies every block as ore or waste using the breakeven cutoff grade formula. Calculates per-block economic value from tonnage, grade, recovery, gold price, and all-in sustaining costs.</p>
+        <span class="tech-tag">Pandas</span><span class="tech-tag">Economic Modeling</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon purple">⛏</div>
+        <h3>BILP Stope Optimization</h3>
+        <p>Binary Integer Linear Programming selects the profit-maximizing set of non-overlapping stopes. A floating stope algorithm generates thousands of candidates; the solver proves mathematical optimality.</p>
+        <span class="tech-tag">PuLP 4.x</span><span class="tech-tag">HiGHS</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon green">🏗</div>
+        <h3>Development Network</h3>
+        <p>Algorithmically generates decline access, level drives along strike, and crosscuts to every selected stope. Automatically estimates per-metre development costs across all mining levels.</p>
+        <span class="tech-tag">Graph Algorithms</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon red">🎲</div>
+        <h3>Monte Carlo Simulation</h3>
+        <p>Runs 1,000+ NPV simulations under simultaneous uncertainty in gold price, grade, and operating costs. Produces full risk profiles with P10–P90 percentiles and tornado sensitivity charts.</p>
+        <span class="tech-tag">Stochastic Modeling</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon cyan">🤖</div>
+        <h3>ML Grade Prediction</h3>
+        <p>Random Forest with 11 engineered spatial features predicts gold grade with R² = 0.978. Tree-level variance provides per-block uncertainty estimates for resource classification.</p>
+        <span class="tech-tag">scikit-learn</span><span class="tech-tag">Random Forest</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT DIFFERS -->
+<section class="section comparison-section" id="comparison">
+  <div class="container">
+    <div class="section-header">
+      <h2>How It Differs from Industry Practice</h2>
+      <p>Traditional underground mine design relies on sequential manual workflows across disconnected software. This platform integrates the full chain into one automated, real-time pipeline.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Aspect</th>
+            <th class="traditional">Traditional Practice</th>
+            <th class="modern">MineOptima</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Stope Layout</td>
+            <td class="traditional">Manual placement by experienced engineers using rules of thumb in Surpac/Deswik — iterative trial-and-error over days or weeks</td>
+            <td class="modern">BILP optimization with mathematically provable optimal solution; exhaustive candidate search guarantees maximum extracted value</td>
+          </tr>
+          <tr>
+            <td>Grade Estimation</td>
+            <td class="traditional">Kriging or Inverse Distance Weighting from drillhole data with limited uncertainty quantification</td>
+            <td class="modern">Random Forest with spatial features achieves R² = 0.978; tree variance gives per-block uncertainty for resource classification</td>
+          </tr>
+          <tr>
+            <td>Risk Analysis</td>
+            <td class="traditional">Deterministic single-scenario NPV; manual sensitivity for a few key variables</td>
+            <td class="modern">1,000-iteration Monte Carlo with simultaneous price, grade, and cost variation; full NPV distribution with P10–P90 and tornado charts</td>
+          </tr>
+          <tr>
+            <td>Workflow</td>
+            <td class="traditional">Sequential disconnected tools — Surpac → spreadsheets → Whittle/COMET — each step requiring specialist input</td>
+            <td class="modern">Integrated pipeline where changing one parameter (e.g. gold price) cascades through the entire design; single interface</td>
+          </tr>
+          <tr>
+            <td>Iteration Speed</td>
+            <td class="traditional">Days to weeks per complete design iteration; major parameter changes require restart</td>
+            <td class="modern">Under 60 seconds for the full pipeline; real-time parameter exploration via web dashboard</td>
+          </tr>
+          <tr>
+            <td>Visualization</td>
+            <td class="traditional">Specialized CAD software (Surpac, Vulcan, Leapfrog) requiring expensive licenses and training</td>
+            <td class="modern">Browser-based interactive 3D visualization accessible to any stakeholder — no installation required</td>
+          </tr>
+          <tr>
+            <td>Reproducibility</td>
+            <td class="traditional">Design quality depends on individual engineer experience; difficult to audit decision rationale</td>
+            <td class="modern">Fully deterministic given parameters; every design decision traceable to an optimization objective or algorithm</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- APP / DASHBOARD -->
+<section class="app-section" id="app">
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="app-sidebar" id="appSidebar">
+      <div class="sidebar-title">Control Panel</div>
+
+      <div class="param-group">
+        <div class="param-group-title">📦 Block Model</div>
+        <div class="param-row"><label>Grid X</label><input type="number" id="p_nx" value="30" min="10" max="60" step="5"></div>
+        <div class="param-row"><label>Grid Y</label><input type="number" id="p_ny" value="25" min="10" max="60" step="5"></div>
+        <div class="param-row"><label>Grid Z</label><input type="number" id="p_nz" value="15" min="5" max="30" step="5"></div>
+        <div class="param-row"><label>Block Size (m)</label><input type="number" id="p_bs" value="5" min="3" max="10"></div>
+        <div class="param-row"><label>Seed</label><input type="number" id="p_seed" value="42" min="1" max="999"></div>
+      </div>
+
+      <div class="param-group">
+        <div class="param-group-title">💰 Economics</div>
+        <div class="param-row"><label>Gold Price ($/oz)</label><input type="number" id="p_gold" value="1900" min="1000" max="3000" step="50"></div>
+        <div class="param-row"><label>Mining Cost ($/t)</label><input type="number" id="p_mining" value="45" min="20" max="100" step="5"></div>
+        <div class="param-row"><label>Processing ($/t)</label><input type="number" id="p_proc" value="25" min="10" max="60" step="5"></div>
+        <div class="param-row"><label>G&A ($/t)</label><input type="number" id="p_ga" value="10" min="5" max="30" step="5"></div>
+        <div class="param-row">
+          <label>Recovery</label>
+          <input type="range" id="p_rec" value="92" min="70" max="99">
+          <span class="range-val" id="p_rec_val">92%</span>
+        </div>
+      </div>
+
+      <div class="param-group">
+        <div class="param-group-title">⛏ Stope Constraints</div>
+        <div class="param-row"><label>Min Width</label><input type="number" id="p_minw" value="2" min="1" max="5"></div>
+        <div class="param-row"><label>Max Width</label><input type="number" id="p_maxw" value="3" min="2" max="6"></div>
+        <div class="param-row"><label>Min Height</label><input type="number" id="p_minh" value="3" min="2" max="8"></div>
+        <div class="param-row"><label>Max Height</label><input type="number" id="p_maxh" value="5" min="3" max="10"></div>
+        <div class="param-row"><label>Min Length</label><input type="number" id="p_minl" value="2" min="1" max="6"></div>
+        <div class="param-row"><label>Max Length</label><input type="number" id="p_maxl" value="4" min="2" max="8"></div>
+        <div class="param-row"><label>Step Size</label><input type="number" id="p_step" value="2" min="1" max="4"></div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;margin-top:0.5rem" onclick="generateBlockModel()">
+        Generate Block Model
+      </button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="app-main">
+      <div class="tabs" id="tabBar">
+        <button class="tab active" data-tab="tab-block">📊 Block Model</button>
+        <button class="tab" data-tab="tab-ore">🔍 Ore Classification</button>
+        <button class="tab" data-tab="tab-stope">⛏ Stope Optimization</button>
+        <button class="tab" data-tab="tab-layout">🏗 Mine Layout</button>
+        <button class="tab" data-tab="tab-econ">📈 Economics</button>
+        <button class="tab" data-tab="tab-mc">🎲 Monte Carlo</button>
+        <button class="tab" data-tab="tab-ml">🤖 ML Prediction</button>
+      </div>
+
+      <!-- TAB 1: Block Model -->
+      <div class="tab-content active" id="tab-block">
+        <div id="block-status" class="status-msg info">Click "Generate Block Model" in the sidebar to start.</div>
+        <div class="metrics-row" id="block-metrics" style="display:none">
+          <div class="metric-card"><div class="metric-label">Total Blocks</div><div class="metric-value blue" id="m_total_blocks">—</div></div>
+          <div class="metric-card"><div class="metric-label">Ore Blocks</div><div class="metric-value green" id="m_ore_blocks">—</div></div>
+          <div class="metric-card"><div class="metric-label">Mean Grade</div><div class="metric-value amber" id="m_mean_grade">—</div></div>
+          <div class="metric-card"><div class="metric-label">Max Grade</div><div class="metric-value purple" id="m_max_grade">—</div></div>
+        </div>
+        <div style="margin-bottom:1rem">
+          <label style="font-size:0.85rem;color:var(--text-muted);margin-right:0.5rem">Display:</label>
+          <select id="blockViewMode" onchange="updateBlockPlot()" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.6rem;font-size:0.82rem">
+            <option value="all">All Blocks</option>
+            <option value="ore">Ore Blocks Only</option>
+            <option value="high">High Grade (&gt;2 g/t)</option>
+          </select>
+        </div>
+        <div class="chart-container"><div id="chart-block3d" style="height:600px"></div></div>
+      </div>
+
+      <!-- TAB 2: Ore Classification -->
+      <div class="tab-content" id="tab-ore">
+        <div id="ore-status" class="status-msg info">Generate block model first.</div>
+        <div id="ore-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">Cutoff Grade</div><div class="metric-value amber" id="m_cutoff">—</div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-grade-hist" style="height:400px"></div></div>
+            <div class="chart-container"><div id="chart-grade-tonnage" style="height:400px"></div></div>
+          </div>
+          <h3 style="margin:1rem 0 0.5rem;font-size:1rem">Cross-Section View</h3>
+          <div class="z-slider-row">
+            <label>Elevation:</label>
+            <input type="range" id="zSlider" style="flex:1;width:auto" oninput="updateCrossSection()">
+            <span class="range-val" id="zSliderVal">—</span>
+          </div>
+          <div class="chart-container"><div id="chart-cross-section" style="height:450px"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 3: Stope Optimization -->
+      <div class="tab-content" id="tab-stope">
+        <div id="stope-status" class="status-msg info">Generate block model, then run optimization.</div>
+        <button class="btn btn-primary" onclick="runOptimization()" id="btn-optimize" style="margin-bottom:1rem">🚀 Run Optimization</button>
+        <div id="stope-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">Selected Stopes</div><div class="metric-value blue" id="m_n_selected">—</div></div>
+            <div class="metric-card"><div class="metric-label">Total Value</div><div class="metric-value green" id="m_stope_value">—</div></div>
+            <div class="metric-card"><div class="metric-label">Total Tonnage</div><div class="metric-value amber" id="m_stope_tonnage">—</div></div>
+            <div class="metric-card"><div class="metric-label">Metal Content</div><div class="metric-value purple" id="m_stope_metal">—</div></div>
+          </div>
+          <div class="chart-container"><div id="chart-stope3d" style="height:650px"></div></div>
+          <h3 style="margin:1.5rem 0 0.75rem;font-size:1rem">Selected Stopes Details</h3>
+          <div class="data-table-wrap"><table class="data-table" id="stope-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- TAB 4: Mine Layout -->
+      <div class="tab-content" id="tab-layout">
+        <div id="layout-status" class="status-msg info">Run stope optimization first.</div>
+        <div id="layout-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">Total Development</div><div class="metric-value blue" id="m_dev_length">—</div></div>
+            <div class="metric-card"><div class="metric-label">Development Cost</div><div class="metric-value green" id="m_dev_cost">—</div></div>
+            <div class="metric-card"><div class="metric-label">Mining Levels</div><div class="metric-value amber" id="m_n_levels">—</div></div>
+          </div>
+          <div class="chart-container"><div id="chart-layout3d" style="height:650px"></div></div>
+          <h3 style="margin:1.5rem 0 0.75rem;font-size:1rem">Development Summary</h3>
+          <div class="data-table-wrap"><table class="data-table" id="layout-table"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- TAB 5: Economics -->
+      <div class="tab-content" id="tab-econ">
+        <div id="econ-status" class="status-msg info">Run stope optimization first.</div>
+        <div id="econ-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">Net Present Value</div><div class="metric-value green" id="m_npv">—</div></div>
+            <div class="metric-card"><div class="metric-label">Total Revenue</div><div class="metric-value blue" id="m_revenue">—</div></div>
+            <div class="metric-card"><div class="metric-label">Total Cost</div><div class="metric-value amber" id="m_total_cost">—</div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-cost-pie" style="height:400px"></div></div>
+            <div class="chart-container"><div id="chart-npv-sens" style="height:400px"></div></div>
+          </div>
+          <div class="chart-container"><div id="chart-stope-dist" style="height:350px"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 6: Monte Carlo -->
+      <div class="tab-content" id="tab-mc">
+        <div id="mc-status" class="status-msg info">Run stope optimization first.</div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end">
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Simulations</label><input type="number" id="p_nsims" value="1000" min="100" max="10000" step="100" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:90px;font-size:0.82rem"></div>
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Price Uncertainty %</label><input type="number" id="p_price_std" value="15" min="5" max="30" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:70px;font-size:0.82rem"></div>
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Grade Uncertainty %</label><input type="number" id="p_grade_std" value="10" min="5" max="25" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:70px;font-size:0.82rem"></div>
+          <button class="btn btn-primary btn-sm" onclick="runMonteCarlo()">🎲 Run Simulation</button>
+        </div>
+        <div id="mc-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">Mean NPV</div><div class="metric-value green" id="m_mc_mean">—</div></div>
+            <div class="metric-card"><div class="metric-label">Std Dev</div><div class="metric-value blue" id="m_mc_std">—</div></div>
+            <div class="metric-card"><div class="metric-label">P(NPV &gt; 0)</div><div class="metric-value amber" id="m_mc_prob">—</div></div>
+            <div class="metric-card"><div class="metric-label">P50 NPV</div><div class="metric-value purple" id="m_mc_p50">—</div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-mc-hist" style="height:420px"></div></div>
+            <div class="chart-container"><div id="chart-tornado" style="height:420px"></div></div>
+          </div>
+          <h3 style="margin:1rem 0 0.5rem;font-size:1rem">NPV Percentiles</h3>
+          <div class="data-table-wrap" style="max-height:200px"><table class="data-table" id="mc-perc-table"><thead></thead><tbody></tbody></table></div>
+          <div class="chart-container" style="margin-top:1.5rem"><div id="chart-mc-scatter" style="height:380px"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 7: ML Prediction -->
+      <div class="tab-content" id="tab-ml">
+        <div id="ml-status" class="status-msg info">Generate block model first.</div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end">
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Model</label>
+            <select id="p_model_type" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">
+              <option value="random_forest">Random Forest</option>
+              <option value="gradient_boosting">Gradient Boosting</option>
+            </select>
+          </div>
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Test Set %</label><input type="number" id="p_test_pct" value="20" min="10" max="40" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:70px;font-size:0.82rem"></div>
+          <button class="btn btn-primary btn-sm" onclick="runMLPrediction()">🤖 Train Model</button>
+        </div>
+        <div id="ml-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">Train R²</div><div class="metric-value blue" id="m_train_r2">—</div></div>
+            <div class="metric-card"><div class="metric-label">Test R²</div><div class="metric-value green" id="m_test_r2">—</div></div>
+            <div class="metric-card"><div class="metric-label">Test RMSE</div><div class="metric-value amber" id="m_test_rmse">—</div></div>
+            <div class="metric-card"><div class="metric-label">Test MAE</div><div class="metric-value purple" id="m_test_mae">—</div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-actual-pred" style="height:420px"></div></div>
+            <div class="chart-container"><div id="chart-feat-imp" style="height:420px"></div></div>
+          </div>
+          <div id="ml-uncertainty-section" style="display:none">
+            <h3 style="margin:1.5rem 0 0.5rem;font-size:1rem">Prediction Uncertainty Map</h3>
+            <div class="z-slider-row">
+              <label>Elevation:</label>
+              <input type="range" id="mlZSlider" style="flex:1;width:auto" oninput="updateMLUncertainty()">
+              <span class="range-val" id="mlZSliderVal">—</span>
+            </div>
+            <div class="chart-row">
+              <div class="chart-container"><div id="chart-pred-grade" style="height:420px"></div></div>
+              <div class="chart-container"><div id="chart-pred-unc" style="height:420px"></div></div>
+            </div>
+          </div>
+          <div class="chart-container"><div id="chart-residuals" style="height:320px"></div></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <p>MineOptima — Automated Underground Mine Design Platform</p>
+  <p style="margin-top:0.5rem">Built with Python, Flask, Plotly, PuLP, scikit-learn</p>
+  <div class="footer-links">
+    <a href="#hero">Home</a>
+    <a href="#features">Features</a>
+    <a href="#comparison">Comparison</a>
+    <a href="#app">Dashboard</a>
+  </div>
+</footer>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

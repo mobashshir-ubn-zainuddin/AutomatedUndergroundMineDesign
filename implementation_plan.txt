@@ -1,0 +1,172 @@
+================================================================================
+  AUTOMATED UNDERGROUND MINE DESIGN - IMPLEMENTATION PLAN
+  Project: Stope Layout Optimization with 3D Visualization Web Interface
+  Author: Mobashshir Zainuddin
+  Date: November 2026
+================================================================================
+
+OBJECTIVE:
+Build a working prototype that demonstrates automated underground mine design
+using a block model, stope optimization via BILP, and an interactive 3D web
+visualization — suitable for presenting to Professor and Sun Valley Investments.
+
+================================================================================
+PHASE 1: DATA PREPARATION
+================================================================================
+
+Step 1.1 — Generate Synthetic Block Model
+  - Create a realistic 3D block model (CSV) representing a gold deposit
+  - Each block: X, Y, Z coordinates, gold grade (g/t), density (t/m³),
+    rock type, RQD (Rock Quality Designation)
+  - Block dimensions: 5m x 5m x 5m
+  - Grid size: ~40x30x20 = 24,000 blocks
+  - Grade distribution: simulated using random fields with spatial correlation
+    to mimic real orebody geometry (high-grade core with grade halo)
+  - Output: data/block_model.csv
+
+Step 1.2 — Calculate Economic Block Values
+  - For each block compute: V = Tonnage * (Grade * Recovery * Price - Cost)
+  - Parameters: Gold price $1,900/oz, Recovery 92%, Mining cost $45/t,
+    Processing cost $25/t, G&A $10/t
+  - Classify blocks: ore (V > 0) vs waste (V <= 0)
+  - Apply cutoff grade filter
+  - Output: data/economic_block_model.csv
+
+================================================================================
+PHASE 2: STOPE OPTIMIZATION ENGINE
+================================================================================
+
+Step 2.1 — Candidate Stope Generation (Floating Stope Algorithm)
+  - Define stope dimension constraints:
+    Min width: 5m, Max width: 20m
+    Min height: 10m, Max height: 30m
+    Min strike length: 10m, Max strike length: 25m
+  - Sweep stope template across block model
+  - For each position, calculate total economic value of enclosed blocks
+  - Generate candidate stope list with geometry and value
+  - Output: list of candidate stopes with block memberships
+
+Step 2.2 — Stope Layout Optimization (Binary Integer Linear Programming)
+  - Formulate as BILP:
+    Maximize: Z = sum(V_i * x_i) for all candidate stopes i
+    Subject to:
+      - Non-overlap: no two selected stopes share a block
+      - Minimum pillar width between adjacent stopes (5m)
+      - Stope dimension constraints (enforced in generation)
+  - Solve using PuLP + HiGHS (open-source solver)
+  - Output: optimized set of selected stopes
+
+Step 2.3 — Economic Evaluation
+  - Calculate total NPV, ore recovery, dilution, tonnage
+  - Compare: optimized layout vs greedy selection vs all-candidates
+  - Generate summary statistics table
+
+================================================================================
+PHASE 3: MINE LAYOUT GENERATION
+================================================================================
+
+Step 3.1 — Access Development Network
+  - Generate simplified decline/ramp from surface to deepest level
+  - Create level access drives at each mining level
+  - Connect levels to stopes via crosscuts
+  - Calculate development metres and cost
+
+Step 3.2 — Pillar Design
+  - Identify crown, sill, and rib pillars between stopes
+  - Calculate pillar dimensions and stability metrics
+  - Flag any pillars below minimum width threshold
+
+================================================================================
+PHASE 4: WEB INTERFACE (Streamlit Dashboard)
+================================================================================
+
+Step 4.1 — 3D Block Model Viewer
+  - Interactive 3D scatter plot of block model colored by grade
+  - Toggle between: all blocks, ore blocks only, economic blocks
+  - Adjustable cutoff grade slider
+  - Camera controls (rotate, zoom, pan)
+
+Step 4.2 — Stope Optimization Controls
+  - Input panel for economic parameters (gold price, costs, recovery)
+  - Input panel for stope dimension constraints
+  - "Run Optimization" button that triggers BILP solver
+  - Real-time progress indicator
+
+Step 4.3 — Results Visualization
+  - 3D view of optimized stope layout with selected stopes highlighted
+  - Pillars shown between stopes
+  - Development network overlay
+  - Color-coded by economic value or grade
+
+Step 4.4 — Economic Dashboard
+  - Summary KPIs: Total NPV, Ore Tonnes, Metal Recovered, Mine Life
+  - Grade-tonnage curve
+  - Stope-by-stope economics table
+  - Sensitivity analysis charts (NPV vs gold price, cutoff grade)
+
+Step 4.5 — Comparison & Reporting
+  - Side-by-side comparison of different optimization scenarios
+  - Downloadable PDF/CSV report of results
+  - Export optimized stope coordinates
+
+================================================================================
+PHASE 5: ADVANCED FEATURES (IF TIME PERMITS)
+================================================================================
+
+Step 5.1 — Monte Carlo Sensitivity Analysis
+  - Vary gold price, grade, and costs
+  - Run multiple optimization scenarios
+  - Plot NPV distribution and risk metrics
+
+Step 5.2 — ML-based Grade Prediction
+  - Train Random Forest on block model to predict grade
+  - Compare with kriging-like interpolation
+  - Show prediction uncertainty
+
+================================================================================
+TECHNICAL STACK
+================================================================================
+
+Language:        Python 3.11+
+Data:            Pandas, NumPy, SciPy
+Optimization:    PuLP (BILP formulation) + HiGHS solver
+3D Visualization: Plotly (for web), PyVista (for offline)
+Web Interface:   Streamlit
+Charts:          Plotly
+Export:           CSV, JSON
+
+================================================================================
+FILE STRUCTURE
+================================================================================
+
+Automated_Underground_Mine_design/
+├── implementation_plan.txt          # This file
+├── data/
+│   ├── block_model.csv             # Raw synthetic block model
+│   └── economic_block_model.csv    # With economic values
+├── src/
+│   ├── block_model_generator.py    # Phase 1: Generate synthetic data
+│   ├── economic_evaluator.py       # Phase 1: Economic calculations
+│   ├── stope_generator.py          # Phase 2: Candidate stope generation
+│   ├── stope_optimizer.py          # Phase 2: BILP optimization
+│   ├── mine_layout.py              # Phase 3: Development network
+│   └── utils.py                    # Shared utilities
+├── app.py                          # Streamlit web application
+├── requirements.txt                # Python dependencies
+└── README.md                       # (only if requested)
+
+================================================================================
+EXECUTION ORDER
+================================================================================
+
+1. Create requirements.txt and install dependencies
+2. Build block_model_generator.py → generate data/block_model.csv
+3. Build economic_evaluator.py → generate data/economic_block_model.csv
+4. Build stope_generator.py → candidate stope generation
+5. Build stope_optimizer.py → BILP optimization
+6. Build mine_layout.py → development network
+7. Build app.py → Streamlit dashboard integrating all modules
+8. Test end-to-end pipeline
+9. Run the web interface and verify all visualizations
+
+================================================================================

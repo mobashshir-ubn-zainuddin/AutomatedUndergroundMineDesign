@@ -1,0 +1,621 @@
+Automated Underground Mine Design: Research Background, Public Datasets and Implementation Roadmap
+Your professor's question — "Show me what have you done along these lines till date" — is important. He wants to understand whether you have already explored the technical problem, identified relevant research, or developed any preliminary methodology that can be presented to Sun Valley Investments.
+
+At this stage, you should not start coding an automated mine-design system. You first need to understand the conventional underground mine-design workflow, identify what exactly can be automated, find usable geological and mine-planning data, and formulate a research methodology.
+
+I would approach this as a research problem rather than an ordinary software-development project.
+
+There is one important distinction:
+- You have previous experience in ML-based mining applications, geospatial mineral mapping, Surpac and computational modelling.
+- You have not yet developed an automated underground mine-design system.
+So, the objective now is to build a credible preliminary research proposal, supported by existing research, available datasets and a technically feasible implementation plan. You should not present proposed work as completed work.
+
+1. First understand what Automated Underground Mine Design actually means
+An underground mine is not simply a collection of tunnels. It is a carefully optimized system involving geological, economic, geotechnical and operational constraints.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+10
+
+
+
+
+
+
+
+
+
+
+
+Consider a hypothetical underground gold deposit.
+
+You have:
+- A 3D geological model containing orebody geometry.
+- Ore grades at different spatial locations.
+- Rock-mass properties.
+- Economic parameters such as gold price and mining cost.
+- Mining method constraints.
+- Equipment and production constraints.
+The objective is to determine:
+1. Where should the underground mine be developed?
+2. Where should access tunnels, ramps and levels be constructed?
+3. Which portions of the orebody should be extracted?
+4. What should be the dimensions and locations of stopes?
+5. How can we maximize economic value while satisfying mining constraints?
+This is the fundamental problem.
+2. Break the project into smaller research problems
+I would divide Automated Underground Mine Design into five interconnected modules.
+Proposed automated mine-design architecture
+Module 1: Geological Data Integration
+
+Drill holes, assays, geological surfaces, block model, ore grade
+
+
+Module 2: 3D Orebody Modelling
+
+Grade interpolation, orebody geometry, economic block classification
+
+
+Module 3: Mine Layout Generation
+
+Access tunnels, ramps, levels, development networks
+
+
+Module 4: Stope Design and Optimization
+
+Stope dimensions, extraction boundaries, dilution, recovery, NPV
+
+
+Module 5: Design Evaluation and Visualization
+
+3D mine design, economic evaluation, constraint validation and comparison
+
+
+You do not necessarily need to implement all five modules.
+
+For an initial research prototype, I recommend concentrating on Modules 2, 3 and 4, using an existing geological model as input.
+3. Public datasets you can actually use
+This is probably the most important part of your preparation.
+
+Yes, public datasets exist. However, there is a catch: geological exploration datasets are much easier to find than complete underground mine-design datasets.
+
+You may find drill-hole coordinates, assays, lithology and geological models, but rarely a complete dataset containing all of the following:
+- 3D orebody geometry
+- Block model with grade values
+- Geotechnical properties
+- Existing underground tunnels and stopes
+- Mining costs and economic parameters
+- Equipment and operational constraints
+Therefore, I would combine an available geological dataset with a synthetic mine-design model for the initial prototype.
+Dataset 1: MineLib — synthetic block models
+My first recommendation for prototyping
+
+
+
+
+
+
+
+
+
+
+MineLib
+
+A research collection of mining optimization benchmark instances, including synthetic block models.
+
+Useful for understanding block-based optimization, although it is not a complete underground mine-design dataset.
+Find MineLib and its dataset references
+
+Why it is useful:
+
+A block model represents the deposit as a 3D grid. Each block can have attributes such as:
+Attribute	Example
+X coordinate	100
+Y coordinate	200
+Z coordinate	-150
+Block dimensions	10 × 10 × 5 m
+Gold grade	2.5 g/t
+Density	2.7 t/m³
+Economic value	Calculated
+
+You can use this to develop algorithms for identifying economically attractive extraction regions.
+
+Limitation: MineLib is mainly known for open-pit optimization benchmarks. Do not assume that every instance is suitable for underground stope design.
+Dataset 2: Open-stope optimization research dataset
+Directly relevant to underground mine design
+
+
+
+
+
+
+
+
+
+
+Automated open-stope design optimization
+
+A research dataset associated with an automated open-stope layout optimization method using DBSCAN and Principal Component Analysis.
+Access the Figshare datasetCC BY 4.0 according to its dataset record.
+
+
+The associated research explores:
+- Identifying ore veins automatically.
+- DBSCAN clustering.
+- PCA for estimating orebody orientation.
+- Stope and pillar size constraints.
+- Automated open-stope layout generation.
+The research reports testing on five realistic instances and processing 10 million blocks in under a minute. 
+datasetcatalog.nlm.nih.gov+1
+
+
+Why I find this interesting: It is very close to the type of problem Sun Valley has described. You can study the methodology and use it as a starting point rather than inventing an entire mine-design algorithm from scratch.
+Dataset 3: Binary Integer Linear Programming for Stope Layout Optimization
+Essential research reference
+
+
+
+
+
+
+
+
+
+
+A Binary Integer Linear Programming Model for Optimizing Underground Stope Layout
+
+Mensah and Awuah-Offei, 2025.
+Read the research paperAccess the research code and data
+
+This is one of the most relevant references for your proposed project.
+
+The paper formulates stope-layout optimization as a Binary Integer Linear Programming (BILP) problem.
+
+In simplified terms:
+- Divide the deposit into candidate mining regions.
+- Define whether each candidate stope is selected or not.
+- Assign economic value to each candidate.
+- Introduce constraints to prevent overlapping stopes and enforce pillar requirements.
+- Find the combination that maximizes the objective function.
+For example, a binary variable:
+\[
+x_i =
+\begin{cases}
+1 & \text{If stope }i\text{ is selected}\\
+0 & \text{Otherwise}
+\end{cases}
+\]
+
+A simplified objective:
+\[
+\max Z=\sum_{i=1}^{n}V_i x_i
+\]
+
+Where:
+- \(V_i\) = economic value of candidate stope \(i\).
+- \(x_i\) = selection variable.
+The actual paper contains a more detailed optimization formulation. It also discusses extending the model to 3D and addressing diagonal pillar constraints. 
+Springer Link
+
+
+My suggestion: Download the GitHub repository first. Examine its data structures, objective function, constraints and solver implementation. This can save substantial research time.
+Dataset 4: Western Australia geological and drill-hole data
+Useful for real geological data
+
+
+
+
+
+
+
+
+
+
+DMIRS Data and Software Centre
+
+Government geological and mineral exploration data from Western Australia.
+Open the official data portal
+
+This portal provides access to:
+- Drill-hole collar information.
+- Drill-hole assays.
+- Geological information.
+- Geochemistry.
+- Exploration drill-hole datasets.
+It also provides GIS-compatible formats such as shapefiles and geodatabases. 
+dasc.dmirs.wa.gov.au+1
+
+
+This can help you develop the geological input side of the project.
+
+However, you must select a specific deposit and verify that its drill-hole, assay and geological records can be linked together. A large regional exploration database is not automatically a ready-to-use mine-design dataset.
+Dataset 5: British Columbia Geological Survey drill-hole database
+
+
+
+
+
+
+
+
+
+
+BC Geological Survey
+
+An open drill-hole database containing collar information, lithological descriptions and assay data extracted from more than 400 assessment reports.
+Access digital geoscience dataInitial drill-hole database release.
+
+
+This is another useful source for building a real geological dataset. 
+Government of British Columbia+1
+
+
+Important: Neither the Western Australia nor British Columbia dataset should be treated as an underground mine-layout dataset. They provide geological inputs from which you can potentially construct a model.
+Dataset 6: Lisheen Mine — the most promising complete dataset for this project
+My strongest recommendation
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+This is particularly interesting because the Irish Government has released multiple categories of actual mine data from the former Lisheen underground lead-zinc mine.
+
+Official source: Lisheen Mine Data Release – Government of Ireland
+
+The portal lists:
+Dataset	Why it matters
+Block Model	3D geological and grade information
+Drillhole Database	Geological input and validation
+Geotechnical Logs	Ground conditions
+Fracture Map	Structural and geotechnical interpretation
+Backfill Stope Certification	Stope-related information
+Final Mine Plans	Existing mine layout
+Remnant Pillar Triangulations	Pillar geometry
+Final Mine As-built Triangulations	Actual mine geometry
+Production Statistics	Historical mining performance
+Survey Stations	Mine survey information
+
+These are explicitly listed in the government release. 
+Gov.ie+1
+
+
+Why I recommend this dataset:
+
+You can potentially compare your generated mine design with an actual historical mine design.
+
+For example:
+- Input: Geological block model.
+- Your algorithm: Generates candidate stopes.
+- Constraints: Pillar dimensions, mining width, geological boundaries and economic parameters.
+- Output: Optimized stope layout.
+- Validation: Compare your output with the available final mine plans and as-built triangulations.
+That is much stronger than merely generating an artificial 3D underground mine.
+
+One caveat: Lisheen is a lead-zinc mine, not a gold mine. The mining-design methodology can still be studied, but you must not transfer its economic or geological parameters directly to a gold deposit.
+Dataset 7: Galmoy Mine
+Official source: Galmoy Mine Data Release – Government of Ireland
+
+Galmoy is another former underground lead-zinc mine.
+
+Available information includes:
+- Resource and reserve data.
+- Detailed geological logs.
+- Datamine files.
+- Geological maps.
+- Face sketches.
+- Underground survey masters.
+- Groundwater information.
+- Mine statistics.
+
+Gov.ie+1
+This could be useful as a second mine for testing whether an algorithm developed using one deposit generalizes to another.
+
+4. Which dataset should you download first?
+Here is my priority order:
+Priority	Dataset	Intended use
+1	Lisheen	Main research and validation dataset
+2	BILP_SSLO GitHub	Understand and reproduce stope optimization
+3	Figshare open-stope dataset	Study automated orebody identification
+4	Galmoy	Additional geological and mine-layout validation
+5	MineLib	Optimization benchmarking
+
+I would not download everything immediately.
+
+Start with these three:
+Your initial research package
+Lisheen Block Model and Final Mine Plans
+
+Actual mine data and reference design
+
+First
+
+
+BILP_SSLO
+
+Existing optimization formulation and implementation
+
+Second
+
+
+Open-stope optimization Figshare dataset
+
+Existing ML-based methodology
+
+Third
+
+
+5. How will our automated mine-design system actually work?
+Let's take a practical example.
+
+Suppose we have a hypothetical underground gold deposit with 10,000 geological blocks.
+
+Each block contains:
+- Spatial coordinates.
+- Gold grade.
+- Density.
+- Block dimensions.
+- Geological classification.
+
+
+
+
+
+
+
+
+wallstreet-online.de
+
+
+Step 1: Import the geological block model
+The input might be a CSV file:
+X	Y	Z	Grade (g/t)	Density
+100	200	-100	2.5	2.7
+110	200	-100	3.1	2.7
+120	200	-100	0.4	2.6
+100	210	-100	4.2	2.8
+110	210	-100	1.8	2.7
+
+These are illustrative values, not actual Lisheen data.
+
+First, visualize the block model in 3D.
+Step 2: Identify economically mineable blocks
+You need to calculate the economic value of each block.
+
+A simplified expression:
+\[
+V_i = T_i \left(G_i R P-C_i\right)
+\]
+
+Where:
+- \(V_i\) = economic value of block.
+- \(T_i\) = block tonnage.
+- \(G_i\) = grade.
+- \(R\) = metallurgical recovery.
+- \(P\) = revenue per unit of recovered metal, adjusted for the grade and unit conversion.
+- \(C_i\) = mining and processing cost per tonne.
+You also need to consider cutoff grade and mining dilution.
+
+The algorithm should not simply select all blocks with high grades. A block might have high grade but be inaccessible or impossible to mine economically.
+Step 3: Generate candidate stopes
+
+
+
+
+
+
+
+
+link.springer.com
+
+
+A stope is an underground excavation from which ore is extracted.
+
+You can generate candidate stopes using:
+- Minimum and maximum stope width.
+- Minimum and maximum stope height.
+- Minimum strike length.
+- Geological continuity.
+- Minimum pillar width.
+- Geotechnical constraints.
+For example, suppose your system generates 100 possible stope configurations.
+
+Each candidate will contain a collection of blocks.
+
+Your algorithm must decide which candidates should be selected.
+Step 4: Optimize the stope layout
+This is where Operations Research becomes important.
+
+You can formulate the problem as:
+\[
+\max \sum_{i=1}^{n}V_i x_i
+\]
+
+Subject to:
+
+Geometric constraints
+- Stope dimensions must be within allowed limits.
+- Stopes must follow the orebody geometry.
+Pillar constraints
+- Adjacent stopes must maintain minimum pillar dimensions.
+- Overlapping stopes must not be selected.
+Geotechnical constraints
+- Maintain acceptable ground stability.
+- Respect extraction ratios and ground-condition restrictions.
+Economic constraints
+- Maximize economic value.
+- Consider dilution, recovery and operating costs.
+You can solve this using Mixed Integer Linear Programming (MILP), Binary Integer Linear Programming (BILP), or suitable heuristic methods.
+
+This is a better starting point than applying deep learning directly to mine design.
+Step 5: Generate the 3D mine design
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+13
+
+
+
+
+
+
+
+
+
+
+
+Once the stopes have been optimized, visualize:
+- Selected stopes.
+- Unselected ore blocks.
+- Pillars.
+- Access tunnels.
+- Development levels.
+For the first prototype, concentrate on stope geometry and its constraints. Automated access-network design can be introduced as a separate module.
+Step 6: Evaluate the output
+You need to establish whether your algorithm actually improves the design.
+Evaluation parameter	What it measures
+Total economic value	Financial performance
+Ore recovery	Proportion of ore extracted
+Dilution	Waste material included in extraction
+Pillar volume	Material left for structural support
+Stope utilization	How effectively the orebody is mined
+Development length	Required access infrastructure
+Constraint violations	Technical feasibility
+
+Compare your results with an existing mine design or a conventional optimization method.
+
+This comparison is what will turn the software implementation into research.
+6. Where does Machine Learning fit into this project?
+One thing I would strongly recommend: do not force ML into every component.
+
+Mine design is fundamentally a constrained optimization problem. Operations Research is often more suitable than supervised ML for deciding which stopes to select and how they should be arranged.
+
+However, ML can improve several parts of the process.
+Component	Possible technique
+Orebody identification	DBSCAN, PCA
+Grade estimation	Ordinary Kriging, Random Forest
+Rock-mass classification	Random Forest, XGBoost
+Stope selection	MILP, BILP, Genetic Algorithm
+Stope shape optimization	Heuristics, mathematical optimization
+Economic uncertainty	Monte Carlo Simulation
+Design parameter optimization	Bayesian Optimization
+
+A possible advanced research direction would be:
+
+Hybrid ML + Operations Research Framework for Automated Underground Mine Design.
+
+This could be a stronger research contribution than simply implementing a Genetic Algorithm.
+7. Recommended software and technical stack
+You do not need to purchase expensive mining software before beginning.
+Requirement	Suggested tool
+Geological data processing	Python, Pandas, NumPy
+3D geological visualization	PyVista
+GIS and spatial processing	QGIS, GeoPandas
+Optimization	Pyomo, PuLP
+Optimization solver	HiGHS, CBC, Gurobi
+Machine learning	Scikit-learn, XGBoost
+Numerical modelling	SciPy
+3D visualization	Plotly, PyVista
+Research interface	Streamlit
+
+Useful documentation:
+- Pyomo – Mathematical Optimization
+- HiGHS – Open-source Optimization Solver
+- PyVista – 3D Visualization
+- Scikit-learn
+- QGIS
+Your Lenovo LOQ with 16 GB RAM and RTX 4050 is sufficient for an initial prototype of this kind. You do not need GPU-based deep learning for the optimization core.
+8. Research papers you should read before coding
+I would prioritize these references in this order.
+Read first
+1. A Binary Integer Linear Programming Model for Optimizing Underground Stope Layout (2025)
+
+Mensah and Awuah-Offei.
+Read paperFocus on the mathematical formulation, binary variables, stope geometry and pillar constraints.
+
+
+2. Automated Open-Stope Design Optimization Through Machine Learning Methods
+Read paperFocus on DBSCAN, PCA and automated orebody identification.
+
+
+3. Application of Three Existing Stope Boundary Optimisation Methods in an Operating Underground Mine (2017)
+
+Erdogan and Yavuz.
+Read paperStudy the Floating Stope Algorithm, Maximum Value Algorithm and Mineable Shape Optimizer (MSO).
+
+
+4. Awesome Mining Data
+Explore research datasetsA useful starting point for discovering additional geological and mining datasets.
+
+
+9. What should you prepare before meeting Sun Valley?
+I would prepare a preliminary research proposal rather than a working application.
+
+Here is the plan I would follow.
+1. Week 1: Understand existing mine-design methods
+   - Study underground mining methods.
+   - Understand sublevel stoping and open-stope design.
+   - Study stope boundary optimization.
+   - Read the three research papers above.
+2. Week 2: Dataset exploration
+   - Download Lisheen's block model.
+   - Examine its file format and attributes.
+   - Locate geological, geotechnical and mine-plan data.
+   - Explore the BILP_SSLO repository.
+3. Week 3: Define the research problem
+   - Identify which parts of mine design can be automated.
+   - Select a mining method.
+   - Identify the optimization variables.
+   - Formulate technical and economic constraints.
+4. Week 4: Develop a preliminary methodology
+   - Design the computational architecture.
+   - Select optimization algorithms.
+   - Establish evaluation metrics.
+   - Define the validation strategy.
+You can then enter the internship with a clear technical direction rather than spending the first few weeks figuring out what to build.
