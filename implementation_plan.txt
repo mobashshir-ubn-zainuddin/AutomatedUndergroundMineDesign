@@ -8,7 +8,7 @@
 OBJECTIVE:
 Build a working prototype that demonstrates automated underground mine design
 using a block model, stope optimization via BILP, and an interactive 3D web
-visualization — suitable for presenting to Professor and Sun Valley Investments.
+visualization — suitable for academic research and industry demonstration.
 
 ================================================================================
 PHASE 1: DATA PREPARATION
@@ -124,15 +124,65 @@ Step 5.2 — ML-based Grade Prediction
   - Show prediction uncertainty
 
 ================================================================================
+PHASE 6: NEXT-LEVEL FEATURES — PRODUCTION SCHEDULING & GEOTECHNICAL ASSESSMENT
+================================================================================
+
+Step 6.1 — Production Scheduling with DCF NPV
+  - Grade-priority scheduling: assign stopes to periods in descending grade
+  - Configurable annual mining rate (default 500,000 t/year)
+  - Per-period metrics: tonnage, metal produced, revenue, operating costs,
+    development cost allocation, net cash flow
+  - Discounted Cash Flow (DCF) analysis with configurable discount rate
+  - Cumulative DCF NPV tracking across mine life
+  - Visualizations: period cash flow waterfall, cumulative DCF curve,
+    tonnage profile, grade profile per period
+  - Module: src/production_scheduler.py
+  - API: /api/schedule (POST)
+  - Frontend: Tab 8 — Production Schedule
+
+Step 6.2 — Geotechnical Stability Assessment
+  - Stope stability analysis:
+    • Depth-based in-situ stress (σv, σh) with configurable K-ratio
+    • UCS (Uniaxial Compressive Strength) with rock mass variability
+    • Stability Number = UCS / σ_max → risk classification
+      (Low / Medium / High / Critical)
+    • Hydraulic radius calculation per stope
+  - Mathews Stability Graph method:
+    • Q-system rock mass quality estimate (RQD-based)
+    • Mathews N calculation with depth, geometry, and gravity factors
+    • Zone classification: Stable / Transitional / Caving
+  - Pillar assessment:
+    • Identify adjacent stope pairs within proximity threshold
+    • Calculate pillar stress using tributary area method
+    • Pillar strength via empirical formula (UCS × 0.6 × √(W/H))
+    • Factor of Safety → Adequate (>1.5) / Marginal (1.0–1.5) / Inadequate (<1.0)
+    • Flag pillars below minimum width threshold
+  - Visualizations: risk distribution pie, pillar status bar chart,
+    stability number vs depth scatter, Mathews zone classification
+  - Module: src/geotechnical.py
+  - API: /api/geotechnical (POST)
+  - Frontend: Tab 9 — Geotechnical Assessment
+
+Step 6.3 — Flask Web Platform Migration
+  - Migrated from Streamlit to Flask + HTML5/CSS3/JavaScript
+  - RESTful API architecture with JSON endpoints
+  - Plotly.js client-side rendering (no server-side figure generation)
+  - Responsive dark-themed UI with per-tab inline loading indicators
+  - Landing page with feature showcase and industry comparison
+  - Render-ready deployment (PORT environment variable)
+
+================================================================================
 TECHNICAL STACK
 ================================================================================
 
 Language:        Python 3.11+
 Data:            Pandas, NumPy, SciPy
 Optimization:    PuLP (BILP formulation) + HiGHS solver
-3D Visualization: Plotly (for web), PyVista (for offline)
-Web Interface:   Streamlit
-Charts:          Plotly
+3D Visualization: Plotly.js (client-side)
+Web Framework:   Flask (RESTful API)
+Frontend:        HTML5, CSS3, JavaScript
+Charts:          Plotly.js
+ML:              scikit-learn (Random Forest, Gradient Boosting)
 Export:           CSV, JSON
 
 ================================================================================
@@ -140,20 +190,30 @@ FILE STRUCTURE
 ================================================================================
 
 Automated_Underground_Mine_design/
+├── flask_app.py                     # Flask backend — REST API endpoints
+├── app.py                           # Streamlit app (legacy)
 ├── implementation_plan.txt          # This file
+├── requirements.txt                 # Python dependencies
+├── README.md                        # Project documentation
+├── Technology_Report.docx           # Technology implementation report
 ├── data/
 │   ├── block_model.csv             # Raw synthetic block model
 │   └── economic_block_model.csv    # With economic values
 ├── src/
-│   ├── block_model_generator.py    # Phase 1: Generate synthetic data
+│   ├── block_model_generator.py    # Phase 1: Synthetic data generation
 │   ├── economic_evaluator.py       # Phase 1: Economic calculations
 │   ├── stope_generator.py          # Phase 2: Candidate stope generation
 │   ├── stope_optimizer.py          # Phase 2: BILP optimization
 │   ├── mine_layout.py              # Phase 3: Development network
-│   └── utils.py                    # Shared utilities
-├── app.py                          # Streamlit web application
-├── requirements.txt                # Python dependencies
-└── README.md                       # (only if requested)
+│   ├── monte_carlo.py              # Phase 5: Monte Carlo NPV simulation
+│   ├── grade_prediction.py         # Phase 5: ML grade prediction
+│   ├── production_scheduler.py     # Phase 6: Production scheduling + DCF
+│   └── geotechnical.py             # Phase 6: Geotechnical assessment
+├── templates/
+│   └── index.html                  # HTML template (landing + dashboard)
+└── static/
+    ├── css/style.css               # Dark-themed responsive CSS
+    └── js/app.js                   # Frontend logic, Plotly charts, tabs
 
 ================================================================================
 EXECUTION ORDER

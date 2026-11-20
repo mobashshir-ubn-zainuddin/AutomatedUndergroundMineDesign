@@ -8,14 +8,16 @@ Built with a **Flask + Python** backend and an interactive **Plotly.js** fronten
 
 ## Key Features
 
-- **3D Block Model Generation** — Synthetic gold deposit with two ore zones and spatially correlated grade fields (Gaussian filtering)
+- **3D Block Model Generation** — Geologically calibrated Archean lode gold deposit with log-normal grade distribution, nugget effect (CV ~180%), quartz vein structures, high-grade shoots, and alteration zonation
 - **Economic Evaluation** — Breakeven cutoff grade calculation, per-block valuation (V = Tonnage × (Grade × Recovery × Price − Cost))
 - **Floating Stope Algorithm** — Exhaustive candidate stope generation with configurable geometry constraints
 - **BILP Stope Optimization** — Binary Integer Linear Programming via PuLP 4.x + HiGHS solver with provably optimal non-overlapping stope selection
 - **Development Network** — Algorithmic generation of decline, level drives, and crosscuts with cost estimation
 - **Monte Carlo Simulation** — 1,000+ NPV simulations under price/grade/cost uncertainty with tornado sensitivity analysis
 - **ML Grade Prediction** — Random Forest / Gradient Boosting with 11 spatial features, uncertainty quantification via tree variance
-- **Interactive Web Dashboard** — 7-tab interface with 3D Plotly visualization, real-time parameter controls, responsive dark-themed UI
+- **Production Scheduling** — Grade-priority stope sequencing, annual mining rate control, DCF NPV with configurable discount rate, cumulative cash flow tracking
+- **Geotechnical Assessment** — Mathews stability graph method, in-situ stress analysis, pillar Factor of Safety, risk classification (Low/Medium/High/Critical)
+- **Interactive Web Dashboard** — 9-tab interface with 3D Plotly visualization, real-time parameter controls, responsive dark-themed UI
 
 ---
 
@@ -38,7 +40,9 @@ Automated_Underground_Mine_design/
 │   ├── stope_optimizer.py        # BILP optimization (PuLP 4.x + HiGHS)
 │   ├── mine_layout.py            # Development network (decline, drives, crosscuts)
 │   ├── monte_carlo.py            # Monte Carlo NPV simulation & tornado analysis
-│   └── grade_prediction.py       # ML grade prediction (Random Forest / GBM)
+│   ├── grade_prediction.py       # ML grade prediction (Random Forest / GBM)
+│   ├── production_scheduler.py   # Production scheduling with DCF NPV
+│   └── geotechnical.py           # Geotechnical stability assessment
 │
 ├── templates/
 │   └── index.html                # Main HTML template (landing page + dashboard)
@@ -77,7 +81,7 @@ Automated_Underground_Mine_design/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/Automated_Underground_Mine_design.git
+git clone https://github.com/mobashshir-ubn-zainuddin/AutomatedUndergroundMineDesign
 cd Automated_Underground_Mine_design
 ```
 
@@ -136,6 +140,8 @@ The app will start on **http://localhost:5050**. Open this URL in your browser.
 | `/api/monte-carlo` | POST | Run Monte Carlo NPV simulation |
 | `/api/ml-predict` | POST | Train ML grade prediction model |
 | `/api/ml-uncertainty` | POST | Get prediction uncertainty at an elevation |
+| `/api/schedule` | POST | Generate production schedule with DCF NPV |
+| `/api/geotechnical` | POST | Run geotechnical stability assessment |
 
 ---
 
@@ -183,6 +189,30 @@ gunicorn flask_app:app --bind 0.0.0.0:5050
 
 ---
 
+## Data Sources & Calibration
+
+The synthetic block model is calibrated against published geological and economic parameters from real-world underground gold operations:
+
+| Parameter | Value | Reference |
+|---|---|---|
+| Grade distribution | Log-normal, mean ~2–5 g/t Au | Archean lode gold deposits (Canadian Shield) |
+| High-grade zones | Up to 20+ g/t Au | NI 43-101 reports, Red Lake (Evolution Mining) |
+| Block size | 5m × 5m × 5m | Industry standard for underground stope design |
+| Gold price | US$1,900/oz | World Gold Council benchmark |
+| Mining cost | $45/t | Canadian underground gold AISC benchmarks |
+| Processing cost | $25/t | Typical CIL/CIP gold processing |
+| Recovery | 92% | LaRonde Mine (Agnico Eagle) technical reports |
+| UCS | 120 MPa (σ = 25) | Hard-rock Precambrian geology |
+| Mathews method | Mathews et al. (1981), Potvin (1988) | Global standard for open stope stability |
+
+---
+
+## Author
+
+**Mobashshir Zainuddin**
+
+---
+
 ## License
 
-This project is a research prototype developed for academic purposes.
+This project was developed for academic and research purposes.

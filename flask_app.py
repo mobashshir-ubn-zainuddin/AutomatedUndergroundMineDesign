@@ -13,6 +13,8 @@ from stope_optimizer import optimize_stope_layout
 from mine_layout import generate_development_network
 from monte_carlo import run_monte_carlo
 from grade_prediction import train_grade_model
+from production_scheduler import schedule_production
+from geotechnical import assess_stability
 
 import numpy as np
 import pandas as pd
@@ -364,5 +366,45 @@ def api_ml_uncertainty():
     }))
 
 
+@app.route("/api/schedule", methods=["POST"])
+def api_schedule():
+    if "opt_result" not in cache or not cache["opt_result"]["selected"]:
+        return jsonify({"error": "Run optimization first"}), 400
+
+    p = request.json
+    selected = cache["opt_result"]["selected"]
+    block_size = cache["block_size"]
+    dev = generate_development_network(selected, block_size=block_size)
+    ep = cache["econ_params"]
+
+    result = schedule_production(
+        selected, dev,
+        mining_rate_tpa=p.get("mining_rate", 500000),
+        discount_rate=p.get("discount_rate", 8) / 100,
+        gold_price=ep["gold_price"],
+        mining_cost=ep["mining_cost"],
+        processing_cost=ep["processing_cost"],
+        ga_cost=ep["ga_cost"],
+        recovery=ep["recovery"],
+    )
+    cache["schedule"] = result
+
+    return jsonify(np_safe(result))
+
+
+@app.route("/api/geotechnical", methods=["POST"])
+def api_geotechnical():
+    if "opt_result" not in cache or not cache["opt_result"]["selected"]:
+        return jsonify({"error": "Run optimization first"}), 400
+
+    selected = cache["opt_result"]["selected"]
+    result = assess_stability(selected)
+    cache["geotech"] = result
+
+    return jsonify(np_safe(result))
+
+
 if __name__ == "__main__":
-    app.run(debug=False, port=5050, host="0.0.0.0")
+    import os
+    port = int(os.environ.get("PORT", 5050))
+    app.run(debug=False, port=port, host="0.0.0.0")

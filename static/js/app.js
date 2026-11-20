@@ -575,6 +575,126 @@ async function updateMLUncertainty() {
   } catch (e) { /* ignore */ }
 }
 
+// ===== PRODUCTION SCHEDULE =====
+async function runSchedule() {
+  if (!optimized) { document.getElementById('sched-status').textContent = 'Run optimization first.'; return; }
+  showTabLoading('tab-schedule', 'Generating production schedule...');
+  try {
+    const res = await fetch('/api/schedule', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        mining_rate: parseInt(document.getElementById('p_mining_rate').value),
+        discount_rate: parseFloat(document.getElementById('p_discount_rate').value),
+      })
+    });
+    const d = await res.json();
+    if (d.error) { document.getElementById('sched-status').textContent = d.error; hideTabLoading('tab-schedule'); return; }
+
+    document.getElementById('sched-status').style.display = 'none';
+    document.getElementById('sched-content').style.display = 'block';
+
+    const fmt = v => (v >= 1e6) ? '$' + (v/1e6).toFixed(1) + 'M' : '$' + (v/1e3).toFixed(0) + 'K';
+    document.getElementById('m_dcf_npv').textContent = fmt(d.total_dcf_npv);
+    document.getElementById('m_undisc_npv').textContent = fmt(d.undiscounted_npv);
+    document.getElementById('m_mine_life').textContent = d.mine_life_years + ' years';
+    document.getElementById('m_mining_rate').textContent = (d.mining_rate_tpa/1000).toFixed(0) + 'K t/yr';
+
+    const periods = d.periods.map(p => 'Year ' + p.period);
+
+    Plotly.newPlot('chart-sched-cashflow', [
+      { x: periods, y: d.periods.map(p => p.revenue), name: 'Revenue', type: 'bar', marker: { color: '#22d3ee' } },
+      { x: periods, y: d.periods.map(p => -p.opex), name: 'OpEx', type: 'bar', marker: { color: '#f43f5e' } },
+      { x: periods, y: d.periods.map(p => -p.dev_cost), name: 'Dev Cost', type: 'bar', marker: { color: '#f59e0b' } },
+      { x: periods, y: d.periods.map(p => p.net_cash_flow), name: 'Net CF', type: 'scatter', mode: 'lines+markers', line: { color: '#a78bfa', width: 3 } },
+    ], { ...plotlyDarkLayout, barmode: 'relative', title: { text: 'Period Cash Flow', font: { size: 14 } }, height: 420 }, plotlyConfig);
+
+    Plotly.newPlot('chart-sched-cumulative', [
+      { x: periods, y: d.periods.map(p => p.cumulative_dcf), type: 'scatter', mode: 'lines+markers',
+        fill: 'tozeroy', line: { color: '#10b981', width: 3 }, fillcolor: 'rgba(16,185,129,0.15)', name: 'Cumulative DCF' },
+    ], { ...plotlyDarkLayout, title: { text: 'Cumulative DCF NPV', font: { size: 14 } }, height: 420 }, plotlyConfig);
+
+    Plotly.newPlot('chart-sched-tonnage', [
+      { x: periods, y: d.periods.map(p => p.tonnage), type: 'bar', marker: { color: '#3b82f6' }, name: 'Tonnage' },
+    ], { ...plotlyDarkLayout, title: { text: 'Period Tonnage', font: { size: 14 } }, yaxis: { ...plotlyDarkLayout.yaxis, title: 'Tonnes' }, height: 380 }, plotlyConfig);
+
+    Plotly.newPlot('chart-sched-grade', [
+      { x: periods, y: d.periods.map(p => p.avg_grade), type: 'scatter', mode: 'lines+markers',
+        line: { color: '#fbbf24', width: 3 }, marker: { size: 8 }, name: 'Avg Grade' },
+    ], { ...plotlyDarkLayout, title: { text: 'Period Average Grade (g/t)', font: { size: 14 } }, height: 380 }, plotlyConfig);
+
+  } catch (e) { document.getElementById('sched-status').textContent = 'Error: ' + e.message; }
+  hideTabLoading('tab-schedule');
+}
+
+// ===== GEOTECHNICAL ASSESSMENT =====
+async function runGeotech() {
+  if (!optimized) { document.getElementById('geo-status').textContent = 'Run optimization first.'; return; }
+  showTabLoading('tab-geotech', 'Assessing geotechnical stability...');
+  try {
+    const res = await fetch('/api/geotechnical', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({})
+    });
+    const d = await res.json();
+    if (d.error) { document.getElementById('geo-status').textContent = d.error; hideTabLoading('tab-geotech'); return; }
+
+    document.getElementById('geo-status').style.display = 'none';
+    document.getElementById('geo-content').style.display = 'block';
+
+    const s = d.summary;
+    document.getElementById('m_geo_stopes').textContent = s.total_stopes;
+    document.getElementById('m_geo_stability').textContent = s.avg_stability_number;
+    document.getElementById('m_geo_pillars').textContent = s.total_pillars;
+    document.getElementById('m_geo_fos').textContent = s.avg_fos;
+
+    // Risk distribution pie
+    const riskLabels = Object.keys(s.risk_distribution);
+    const riskValues = Object.values(s.risk_distribution);
+    const riskColors = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e', Critical: '#dc2626' };
+    Plotly.newPlot('chart-geo-risk', [{
+      labels: riskLabels, values: riskValues, type: 'pie', hole: 0.45,
+      marker: { colors: riskLabels.map(l => riskColors[l] || '#6366f1') },
+      textinfo: 'label+percent', textfont: { color: '#e2e8f0' },
+    }], { ...plotlyDarkLayout, title: { text: 'Stope Risk Distribution', font: { size: 14 } }, height: 380, showlegend: false }, plotlyConfig);
+
+    // Pillar status bar
+    const pillarStatuses = ['Adequate', 'Marginal', 'Inadequate'];
+    const pillarCounts = [s.adequate_pillars, s.marginal_pillars, s.inadequate_pillars];
+    const pillarColors = ['#10b981', '#f59e0b', '#f43f5e'];
+    Plotly.newPlot('chart-geo-pillar', [{
+      x: pillarStatuses, y: pillarCounts, type: 'bar',
+      marker: { color: pillarColors },
+    }], { ...plotlyDarkLayout, title: { text: 'Pillar Assessment', font: { size: 14 } }, height: 380 }, plotlyConfig);
+
+    // Stability number scatter (depth vs stability number)
+    const sa = d.stope_assessments;
+    const riskColorMap = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e', Critical: '#dc2626' };
+    Plotly.newPlot('chart-geo-stability-scatter', [{
+      x: sa.map(s => s.depth_m), y: sa.map(s => s.stability_number),
+      mode: 'markers', type: 'scatter',
+      marker: { size: 10, color: sa.map(s => riskColorMap[s.risk_level] || '#6366f1'), opacity: 0.8 },
+      text: sa.map(s => `Stope ${s.stope_id}<br>Risk: ${s.risk_level}<br>UCS: ${s.ucs} MPa`),
+      hoverinfo: 'text',
+    }], {
+      ...plotlyDarkLayout, title: { text: 'Stability Number vs Depth', font: { size: 14 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Depth (m)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Stability Number' },
+      height: 420,
+    }, plotlyConfig);
+
+    // Mathews zone classification
+    const zones = { Stable: 0, Transitional: 0, Caving: 0 };
+    sa.forEach(s => { if (zones[s.mathews_zone] !== undefined) zones[s.mathews_zone]++; });
+    Plotly.newPlot('chart-geo-mathews', [{
+      labels: Object.keys(zones), values: Object.values(zones), type: 'pie', hole: 0.45,
+      marker: { colors: ['#10b981', '#f59e0b', '#f43f5e'] },
+      textinfo: 'label+percent', textfont: { color: '#e2e8f0' },
+    }], { ...plotlyDarkLayout, title: { text: 'Mathews Stability Zones', font: { size: 14 } }, height: 420, showlegend: false }, plotlyConfig);
+
+  } catch (e) { document.getElementById('geo-status').textContent = 'Error: ' + e.message; }
+  hideTabLoading('tab-geotech');
+}
+
 // ===== SMOOTH SCROLL =====
 document.querySelectorAll('a[href^="#"]').forEach(a => {
   a.addEventListener('click', e => {

@@ -29,18 +29,15 @@
   <div class="hero-bg"></div>
   <div class="hero-grid"></div>
   <div class="hero-content">
-    <div class="hero-badge">
-      <span class="dot"></span>
-      Research Prototype
-    </div>
     <h1>
       Next-Generation<br>
       <span class="gradient-text">Underground Mine Design</span>
     </h1>
     <p class="hero-desc">
-      An integrated computational platform that combines Operations Research, Machine Learning,
-      and Monte Carlo simulation to automate underground stope layout optimization — replacing weeks
-      of manual design iteration with a 60-second intelligent pipeline.
+      An integrated computational platform for underground gold mine design that combines Operations Research,
+      Machine Learning, and Monte Carlo simulation to automate stope layout optimization — replacing weeks
+      of manual design iteration with a 60-second intelligent pipeline. Built for Archean lode gold deposits
+      with nugget effect modeling and vein-hosted grade structures.
     </p>
     <div class="hero-actions">
       <a href="#app" class="btn btn-primary">Launch Dashboard →</a>
@@ -101,6 +98,42 @@
         <h3>ML Grade Prediction</h3>
         <p>Random Forest with 11 engineered spatial features predicts gold grade with R² = 0.978. Tree-level variance provides per-block uncertainty estimates for resource classification.</p>
         <span class="tech-tag">scikit-learn</span><span class="tech-tag">Random Forest</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon green">📅</div>
+        <h3>Production Scheduling</h3>
+        <p>Grade-priority stope sequencing maximizes early cash flows. DCF NPV analysis with configurable discount rate and annual mining rate tracks cumulative project value.</p>
+        <span class="tech-tag">DCF Analysis</span><span class="tech-tag">Scheduling</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon red">🪨</div>
+        <h3>Geotechnical Assessment</h3>
+        <p>Mathews stability graph method, in-situ stress analysis, and pillar Factor of Safety evaluation. Four-tier risk classification from Low to Critical for every stope.</p>
+        <span class="tech-tag">Mathews Method</span><span class="tech-tag">Pillar FoS</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DATA SOURCE -->
+<section class="section" id="datasource" style="padding:3rem 0">
+  <div class="container">
+    <div class="section-header">
+      <h2>Data & Calibration</h2>
+      <p>The block model simulates an Archean lode gold deposit — gold occurring as free nuggets and fine particles within quartz veins, fundamentally different from disseminated base-metal deposits. Parameters are calibrated against published technical reports from real underground gold mines.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;margin-top:1.5rem">
+      <div class="feature-card" style="text-align:left">
+        <h3 style="font-size:1rem;margin-bottom:0.5rem">Gold-Specific Grade Model</h3>
+        <p style="font-size:0.85rem">Log-normal grade distribution with CV ~180% (gold typical: 100–300%, vs 40–80% for copper). Nugget effect modeled: ~2% of vein blocks receive coarse gold bonuses up to 30+ g/t. Calibrated against <strong>Red Lake</strong> (Evolution Mining) and <strong>LaRonde</strong> (Agnico Eagle) NI 43-101 published grade ranges. High-grade shoots at structural intersections, as observed in real Archean lode systems.</p>
+      </div>
+      <div class="feature-card" style="text-align:left">
+        <h3 style="font-size:1rem;margin-bottom:0.5rem">Economic Parameters</h3>
+        <p style="font-size:0.85rem">Gold price US$1,900/oz, mining cost $45/t, processing $25/t, G&A $10/t, 92% recovery — aligned with <strong>World Gold Council</strong> AISC benchmarks. Rock types modeled: Quartz Vein, Altered Basalt, Sericite Zone, Fresh Basalt — reflecting real alteration zonation around gold-bearing structures.</p>
+      </div>
+      <div class="feature-card" style="text-align:left">
+        <h3 style="font-size:1rem;margin-bottom:0.5rem">Geotechnical Inputs</h3>
+        <p style="font-size:0.85rem">Rock mass parameters (UCS 120 MPa, RQD ~65%, K-ratio 1.5) are representative of hard-rock Precambrian geology. Stope stability assessed using the <strong>Mathews method</strong> (Mathews et al., 1981; Potvin, 1988) — the global standard for underground open stope design.</p>
       </div>
     </div>
   </div>
@@ -219,6 +252,8 @@
         <button class="tab" data-tab="tab-econ">📈 Economics</button>
         <button class="tab" data-tab="tab-mc">🎲 Monte Carlo</button>
         <button class="tab" data-tab="tab-ml">🤖 ML Prediction</button>
+        <button class="tab" data-tab="tab-schedule">📅 Production Schedule</button>
+        <button class="tab" data-tab="tab-geotech">🪨 Geotechnical</button>
       </div>
 
       <!-- TAB 1: Block Model -->
@@ -377,6 +412,54 @@
         </div>
       </div>
 
+      <!-- TAB 8: Production Schedule -->
+      <div class="tab-content" id="tab-schedule">
+        <div id="sched-status" class="status-msg info">Run optimization first.</div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end">
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Mining Rate (t/yr)</label><input type="number" id="p_mining_rate" value="500000" min="50000" max="2000000" step="50000" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:120px;font-size:0.82rem"></div>
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Discount Rate %</label><input type="number" id="p_discount_rate" value="8" min="1" max="25" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:80px;font-size:0.82rem"></div>
+          <button class="btn btn-primary btn-sm" onclick="runSchedule()">📅 Generate Schedule</button>
+        </div>
+        <div id="sched-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">DCF NPV</div><div class="metric-value green" id="m_dcf_npv">—</div></div>
+            <div class="metric-card"><div class="metric-label">Undiscounted NPV</div><div class="metric-value blue" id="m_undisc_npv">—</div></div>
+            <div class="metric-card"><div class="metric-label">Mine Life</div><div class="metric-value amber" id="m_mine_life">—</div></div>
+            <div class="metric-card"><div class="metric-label">Mining Rate</div><div class="metric-value purple" id="m_mining_rate">—</div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-sched-cashflow" style="height:420px"></div></div>
+            <div class="chart-container"><div id="chart-sched-cumulative" style="height:420px"></div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-sched-tonnage" style="height:380px"></div></div>
+            <div class="chart-container"><div id="chart-sched-grade" style="height:380px"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 9: Geotechnical Assessment -->
+      <div class="tab-content" id="tab-geotech">
+        <div id="geo-status" class="status-msg info">Run optimization first.</div>
+        <button class="btn btn-primary btn-sm" onclick="runGeotech()" style="margin-bottom:1rem">🪨 Assess Stability</button>
+        <div id="geo-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">Total Stopes</div><div class="metric-value blue" id="m_geo_stopes">—</div></div>
+            <div class="metric-card"><div class="metric-label">Avg Stability №</div><div class="metric-value green" id="m_geo_stability">—</div></div>
+            <div class="metric-card"><div class="metric-label">Total Pillars</div><div class="metric-value amber" id="m_geo_pillars">—</div></div>
+            <div class="metric-card"><div class="metric-label">Avg Pillar FoS</div><div class="metric-value purple" id="m_geo_fos">—</div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-geo-risk" style="height:380px"></div></div>
+            <div class="chart-container"><div id="chart-geo-pillar" style="height:380px"></div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-geo-stability-scatter" style="height:420px"></div></div>
+            <div class="chart-container"><div id="chart-geo-mathews" style="height:420px"></div></div>
+          </div>
+        </div>
+      </div>
+
     </main>
   </div>
 </section>
@@ -384,13 +467,19 @@
 <!-- FOOTER -->
 <footer class="footer">
   <p>MineOptima — Automated Underground Mine Design Platform</p>
-  <p style="margin-top:0.5rem">Built with Python, Flask, Plotly, PuLP, scikit-learn</p>
+  <p style="margin-top:0.5rem">Built with Python, Flask, Plotly, PuLP, scikit-learn by <strong>Mobashshir Zainuddin</strong></p>
   <div class="footer-links">
     <a href="#hero">Home</a>
     <a href="#features">Features</a>
     <a href="#comparison">Comparison</a>
     <a href="#app">Dashboard</a>
   </div>
+  <p style="margin-top:1rem;font-size:0.75rem;color:var(--text-muted)">
+    Data: Geologically calibrated synthetic Archean lode gold deposit. Grade model uses log-normal distribution
+    with nugget effect (CV ~180%), vein-hosted structures, and high-grade shoots — calibrated against published
+    parameters from Red Lake (Evolution Mining), LaRonde (Agnico Eagle), and Mt Charlotte (KCGM) technical reports.
+    Stability analysis via Mathews method (Mathews et al., 1981; Potvin, 1988).
+  </p>
 </footer>
 
 <script src="/static/js/app.js"></script>
