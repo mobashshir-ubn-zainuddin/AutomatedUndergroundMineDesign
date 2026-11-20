@@ -695,6 +695,167 @@ async function runGeotech() {
   hideTabLoading('tab-geotech');
 }
 
+// ===== KRIGING GRADE ESTIMATION =====
+async function runKriging() {
+  if (!blockData) { document.getElementById('krig-status').textContent = 'Generate block model first.'; return; }
+  showTabLoading('tab-kriging', 'Running Ordinary Kriging (this may take ~30s)...');
+  try {
+    const res = await fetch('/api/kriging', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ variogram_model: document.getElementById('p_vario_model').value })
+    });
+    const d = await res.json();
+    if (d.error) { document.getElementById('krig-status').textContent = d.error; hideTabLoading('tab-kriging'); return; }
+
+    document.getElementById('krig-status').style.display = 'none';
+    document.getElementById('krig-content').style.display = 'block';
+
+    const cv = d.cross_validation;
+    const vp = d.variogram_params;
+    document.getElementById('m_krig_model').textContent = d.variogram_model;
+    document.getElementById('m_krig_r2').textContent = cv.r2.toFixed(3);
+    document.getElementById('m_krig_rmse').textContent = cv.rmse.toFixed(3) + ' g/t';
+    document.getElementById('m_krig_range').textContent = vp.range_m + ' m';
+    document.getElementById('m_krig_nugget').textContent = vp.nugget.toFixed(4);
+    document.getElementById('m_krig_sill').textContent = vp.sill.toFixed(4);
+    document.getElementById('m_krig_range2').textContent = vp.range_m;
+
+    // Variogram plot
+    const ev = d.experimental_variogram;
+    const fv = d.fitted_variogram;
+    Plotly.newPlot('chart-variogram', [
+      { x: ev.lags, y: ev.gammas, mode: 'markers', name: 'Experimental', marker: { color: '#f59e0b', size: 10 } },
+      { x: fv.lags, y: fv.gammas, mode: 'lines', name: 'Fitted (' + d.variogram_model + ')', line: { color: '#22d3ee', width: 2.5 } },
+    ], { ...plotlyDarkLayout, title: { text: 'Variogram: ' + d.variogram_model, font: { size: 14 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Lag Distance (m)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Semivariance γ(h)' },
+      height: 380 }, plotlyConfig);
+
+    // Actual vs Predicted scatter
+    const avp = d.actual_vs_predicted;
+    const maxVal = Math.max(...avp.actual, ...avp.predicted);
+    Plotly.newPlot('chart-krig-actual-pred', [
+      { x: avp.actual, y: avp.predicted, mode: 'markers', type: 'scatter',
+        marker: { color: '#10b981', opacity: 0.6, size: 6 }, name: 'Cross-validation' },
+      { x: [0, maxVal], y: [0, maxVal], mode: 'lines', line: { color: '#94a3b8', dash: 'dash' }, name: '1:1 line', showlegend: false },
+    ], { ...plotlyDarkLayout, title: { text: 'Kriging: Actual vs Predicted', font: { size: 14 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Actual Grade (g/t)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Kriged Grade (g/t)' },
+      height: 380 }, plotlyConfig);
+
+    // Kriged grade 3D scatter
+    const p = d.predicted;
+    Plotly.newPlot('chart-krig-map', [{
+      x: p.x, y: p.y, z: p.z, mode: 'markers', type: 'scatter3d',
+      marker: { size: 3, color: p.grade, colorscale: 'Viridis', showscale: true,
+        colorbar: { title: 'Kriged Grade (g/t)', thickness: 15 } },
+      text: p.grade.map(g => g.toFixed(3) + ' g/t'), hoverinfo: 'text',
+    }], { ...plotlyDarkLayout, scene: { ...plotly3dScene },
+      title: { text: 'Ordinary Kriging — Estimated Grade', font: { size: 14 } }, height: 420 }, plotlyConfig);
+
+  } catch (e) { document.getElementById('krig-status').textContent = 'Error: ' + e.message; }
+  hideTabLoading('tab-kriging');
+}
+
+// ===== MULTI-SCENARIO COMPARISON =====
+let savedScenarios = [];
+
+async function saveScenario() {
+  if (!optimized) { alert('Run optimization first.'); return; }
+  const name = document.getElementById('p_scen_name').value.trim() || `Scenario ${savedScenarios.length + 1}`;
+  showTabLoading('tab-scenarios', 'Saving scenario...');
+  try {
+    const res = await fetch('/api/scenarios/save', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name })
+    });
+    const d = await res.json();
+    if (d.error) { alert(d.error); hideTabLoading('tab-scenarios'); return; }
+    document.getElementById('p_scen_name').value = '';
+    document.getElementById('scen-status').textContent = `Saved: "${d.name}". Total: ${d.total} scenario(s).`;
+    await loadScenarioList();
+  } catch (e) { document.getElementById('scen-status').textContent = 'Error: ' + e.message; }
+  hideTabLoading('tab-scenarios');
+}
+
+async function loadScenarioList() {
+  const res = await fetch('/api/scenarios');
+  const scenarios = await res.json();
+  savedScenarios = scenarios;
+  const listEl = document.getElementById('scen-list');
+  if (!scenarios.length) { listEl.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem">No scenarios saved yet.</p>'; return; }
+  listEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+    <thead><tr style="color:var(--text-muted);text-align:left">
+      <th style="padding:0.4rem 0.6rem">Name</th>
+      <th style="padding:0.4rem 0.6rem">Gold Price</th>
+      <th style="padding:0.4rem 0.6rem">Stopes</th>
+      <th style="padding:0.4rem 0.6rem">Tonnage</th>
+      <th style="padding:0.4rem 0.6rem">Total Value</th>
+    </tr></thead>
+    <tbody>${scenarios.map(s => `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:0.4rem 0.6rem;color:var(--accent)">${s.name}</td>
+      <td style="padding:0.4rem 0.6rem">$${s.gold_price}/oz</td>
+      <td style="padding:0.4rem 0.6rem">${s.n_selected}</td>
+      <td style="padding:0.4rem 0.6rem">${(s.total_tonnage/1000).toFixed(0)}K t</td>
+      <td style="padding:0.4rem 0.6rem;color:#10b981">$${(s.total_value/1e6).toFixed(1)}M</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function compareScenarios() {
+  showTabLoading('tab-scenarios', 'Comparing scenarios...');
+  try {
+    const res = await fetch('/api/scenarios/compare', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}'
+    });
+    const d = await res.json();
+    if (d.error) { document.getElementById('scen-status').textContent = d.error; hideTabLoading('tab-scenarios'); return; }
+
+    document.getElementById('scen-charts').style.display = 'block';
+    const names = d.map(s => s.name);
+    const colors = ['#22d3ee','#10b981','#f59e0b','#f43f5e','#a78bfa','#fb923c'];
+
+    Plotly.newPlot('chart-scen-npv', [
+      { x: names, y: d.map(s => s.npv_estimate/1e6), type: 'bar',
+        marker: { color: colors.slice(0, d.length) }, text: d.map(s => '$' + (s.npv_estimate/1e6).toFixed(1) + 'M'), textposition: 'auto' }
+    ], { ...plotlyDarkLayout, title: { text: 'NPV Estimate by Scenario', font: { size: 14 } },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'NPV ($M)' }, height: 380 }, plotlyConfig);
+
+    Plotly.newPlot('chart-scen-tonnage', [
+      { x: names, y: d.map(s => s.total_tonnage/1000), type: 'bar',
+        marker: { color: colors.slice(0, d.length) }, text: d.map(s => (s.total_tonnage/1000).toFixed(0) + 'K'), textposition: 'auto' }
+    ], { ...plotlyDarkLayout, title: { text: 'Total Ore Tonnage by Scenario', font: { size: 14 } },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Tonnage (Kt)' }, height: 380 }, plotlyConfig);
+
+    Plotly.newPlot('chart-scen-grade', [
+      { x: names, y: d.map(s => (s.total_metal_oz * 31.1035 / Math.max(s.total_tonnage, 1))), type: 'bar',
+        marker: { color: colors.slice(0, d.length) } }
+    ], { ...plotlyDarkLayout, title: { text: 'Average Grade by Scenario', font: { size: 14 } },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Avg Grade (g/t)' }, height: 380 }, plotlyConfig);
+
+    Plotly.newPlot('chart-scen-stopes', [
+      { x: names, y: d.map(s => s.n_selected), type: 'bar',
+        marker: { color: colors.slice(0, d.length) }, text: d.map(s => s.n_selected), textposition: 'auto' }
+    ], { ...plotlyDarkLayout, title: { text: 'Stopes Selected by Scenario', font: { size: 14 } },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'No. of Stopes' }, height: 380 }, plotlyConfig);
+
+  } catch (e) { document.getElementById('scen-status').textContent = 'Error: ' + e.message; }
+  hideTabLoading('tab-scenarios');
+}
+
+async function clearScenarios() {
+  if (!confirm('Clear all saved scenarios?')) return;
+  const res = await fetch('/api/scenarios');
+  const list = await res.json();
+  for (const s of list) {
+    await fetch('/api/scenarios/delete/' + s.id, { method: 'DELETE' });
+  }
+  savedScenarios = [];
+  document.getElementById('scen-list').innerHTML = '';
+  document.getElementById('scen-charts').style.display = 'none';
+  document.getElementById('scen-status').textContent = 'All scenarios cleared.';
+}
+
 // ===== SMOOTH SCROLL =====
 document.querySelectorAll('a[href^="#"]').forEach(a => {
   a.addEventListener('click', e => {

@@ -254,6 +254,8 @@
         <button class="tab" data-tab="tab-ml">🤖 ML Prediction</button>
         <button class="tab" data-tab="tab-schedule">📅 Production Schedule</button>
         <button class="tab" data-tab="tab-geotech">🪨 Geotechnical</button>
+        <button class="tab" data-tab="tab-kriging">📐 Kriging</button>
+        <button class="tab" data-tab="tab-scenarios">🔀 Scenarios</button>
       </div>
 
       <!-- TAB 1: Block Model -->
@@ -456,6 +458,62 @@
           <div class="chart-row">
             <div class="chart-container"><div id="chart-geo-stability-scatter" style="height:420px"></div></div>
             <div class="chart-container"><div id="chart-geo-mathews" style="height:420px"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 10: Kriging Grade Estimation -->
+      <div class="tab-content" id="tab-kriging">
+        <div id="krig-status" class="status-msg info">Generate block model first.</div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end">
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Variogram Model</label>
+            <select id="p_vario_model" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;font-size:0.82rem">
+              <option value="spherical">Spherical</option>
+              <option value="exponential">Exponential</option>
+              <option value="gaussian">Gaussian</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="runKriging()">📐 Run Kriging</button>
+        </div>
+        <div id="krig-content" style="display:none">
+          <div class="metrics-row">
+            <div class="metric-card"><div class="metric-label">Model</div><div class="metric-value blue" id="m_krig_model">—</div></div>
+            <div class="metric-card"><div class="metric-label">CV R²</div><div class="metric-value green" id="m_krig_r2">—</div></div>
+            <div class="metric-card"><div class="metric-label">CV RMSE</div><div class="metric-value amber" id="m_krig_rmse">—</div></div>
+            <div class="metric-card"><div class="metric-label">Range (m)</div><div class="metric-value purple" id="m_krig_range">—</div></div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1rem;font-size:0.85rem">
+            <strong>Variogram Parameters:</strong>&nbsp;
+            Nugget: <span id="m_krig_nugget">—</span> &nbsp;|&nbsp;
+            Sill: <span id="m_krig_sill">—</span> &nbsp;|&nbsp;
+            Range: <span id="m_krig_range2">—</span> m
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-variogram" style="height:380px"></div></div>
+            <div class="chart-container"><div id="chart-krig-actual-pred" style="height:380px"></div></div>
+          </div>
+          <div class="chart-container"><div id="chart-krig-map" style="height:420px"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 11: Multi-Scenario Comparison -->
+      <div class="tab-content" id="tab-scenarios">
+        <div id="scen-status" class="status-msg info">Run optimization and save scenarios to compare.</div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end">
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Scenario Name</label><input type="text" id="p_scen_name" placeholder="e.g. High Gold Price" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:180px;font-size:0.82rem"></div>
+          <button class="btn btn-primary btn-sm" onclick="saveScenario()">💾 Save Current</button>
+          <button class="btn btn-outline btn-sm" onclick="compareScenarios()">🔀 Compare All</button>
+          <button class="btn btn-outline btn-sm" style="color:#f43f5e;border-color:#f43f5e" onclick="clearScenarios()">🗑 Clear All</button>
+        </div>
+        <div id="scen-list" style="margin-bottom:1rem"></div>
+        <div id="scen-charts" style="display:none">
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-scen-npv" style="height:380px"></div></div>
+            <div class="chart-container"><div id="chart-scen-tonnage" style="height:380px"></div></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-scen-grade" style="height:380px"></div></div>
+            <div class="chart-container"><div id="chart-scen-stopes" style="height:380px"></div></div>
           </div>
         </div>
       </div>

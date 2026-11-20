@@ -172,6 +172,38 @@ Step 6.3 — Flask Web Platform Migration
   - Render-ready deployment (PORT environment variable)
 
 ================================================================================
+PHASE 7: GEOSTATISTICS, MULTI-SCENARIO COMPARISON & HEALTH ENDPOINT
+================================================================================
+
+Step 7.1 — Health Check Endpoint
+  - Added /healthz route returning JSON {"status": "ok", "service": "..."}
+  - Used by Render/cloud load balancers to verify app is alive
+  - API: /healthz (GET)
+
+Step 7.2 — Ordinary Kriging Grade Estimation
+  - Full geostatistical workflow alongside existing ML grade prediction
+  - Experimental variogram: computes semivariance γ(h) for lag bins
+  - Variogram model fitting: Spherical, Exponential, Gaussian (least-squares grid search)
+  - Ordinary Kriging interpolation with moving neighborhood (up to 20 neighbors)
+  - Kriging variance (σ²_k) for spatial uncertainty quantification
+  - Cross-validation: hold-out R², RMSE, MAE
+  - Visualizations: experimental vs fitted variogram, actual-vs-predicted scatter,
+    3D kriged grade map with variance
+  - Module: src/kriging.py
+  - API: /api/kriging (POST)
+  - Frontend: Tab 10 — Kriging
+
+Step 7.3 — Multi-Scenario Comparison
+  - Save any number of optimization runs as named scenarios in server memory
+  - Each scenario stores: name, economic parameters, optimization summary
+  - Compare side-by-side: NPV, tonnage, average grade, stope count across all scenarios
+  - Side-by-side bar charts for rapid what-if analysis
+  - Delete individual or all scenarios
+  - API: /api/scenarios (GET), /api/scenarios/save (POST),
+         /api/scenarios/compare (POST), /api/scenarios/delete/<id> (DELETE)
+  - Frontend: Tab 11 — Scenarios
+
+================================================================================
 TECHNICAL STACK
 ================================================================================
 
@@ -208,7 +240,8 @@ Automated_Underground_Mine_design/
 │   ├── monte_carlo.py              # Phase 5: Monte Carlo NPV simulation
 │   ├── grade_prediction.py         # Phase 5: ML grade prediction
 │   ├── production_scheduler.py     # Phase 6: Production scheduling + DCF
-│   └── geotechnical.py             # Phase 6: Geotechnical assessment
+│   ├── geotechnical.py             # Phase 6: Geotechnical assessment
+│   └── kriging.py                  # Phase 7: Ordinary Kriging grade estimation
 ├── templates/
 │   └── index.html                  # HTML template (landing + dashboard)
 └── static/

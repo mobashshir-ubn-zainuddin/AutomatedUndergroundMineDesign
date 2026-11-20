@@ -362,6 +362,7 @@ Frontend & HTML5, CSS3, JavaScript \\
 Visualization & Plotly.js (interactive 3D) \\
 Optimization & PuLP 4.x + HiGHS solver \\
 Machine Learning & scikit-learn (Random Forest, GBM) \\
+Geostatistics & Custom Ordinary Kriging (NumPy/SciPy) \\
 Numerical Computing & NumPy, Pandas, SciPy \\
 Deployment & Render (cloud), Gunicorn (WSGI) \\
 \bottomrule
@@ -373,8 +374,8 @@ Deployment & Render (cloud), Gunicorn (WSGI) \\
 The application follows a RESTful API architecture:
 
 \begin{itemize}[itemsep=0.2em]
-    \item \textbf{Backend:} Flask serves 11 API endpoints, each accepting JSON parameters and returning computed results. An in-memory cache stores intermediate results (block model, optimization output) across sequential analysis steps.
-    \item \textbf{Frontend:} A responsive, dark-themed single-page application with 9 interactive tabs. All charts are rendered client-side using Plotly.js for fast, GPU-accelerated visualization. Per-tab inline loading indicators provide non-blocking UX during long computations.
+    \item \textbf{Backend:} Flask serves 16 API endpoints including a \texttt{/healthz} health check for cloud deployment monitoring. An in-memory cache stores intermediate results (block model, optimization output, scenarios) across sequential analysis steps.
+    \item \textbf{Frontend:} A responsive, dark-themed single-page application with 11 interactive tabs. All charts are rendered client-side using Plotly.js for fast, GPU-accelerated visualization. Per-tab inline loading indicators provide non-blocking UX during long computations.
     \item \textbf{Landing page:} Features section, data calibration details, and an industry comparison table highlighting differences from traditional workflows.
 \end{itemize}
 
@@ -399,9 +400,62 @@ The application follows a RESTful API architecture:
 \texttt{/api/ml-uncertainty} & POST & Prediction uncertainty at elevation \\
 \texttt{/api/schedule} & POST & Production schedule with DCF NPV \\
 \texttt{/api/geotechnical} & POST & Geotechnical stability assessment \\
+\texttt{/api/kriging} & POST & Ordinary Kriging grade estimation \\
+\texttt{/api/scenarios} & GET & List saved scenarios \\
+\texttt{/api/scenarios/save} & POST & Save current run as a named scenario \\
+\texttt{/api/scenarios/compare} & POST & Compare all saved scenarios \\
+\texttt{/api/scenarios/delete/<id>} & DELETE & Remove a scenario \\
+\texttt{/healthz} & GET & Health check for deployment monitoring \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+% -----------------------------------------------------------
+\subsection{Ordinary Kriging Grade Estimation}
+\label{sec:kriging}
+
+Ordinary Kriging (OK) is the industry-standard geostatistical interpolation method used in JORC/NI~43-101 compliant resource estimation. The implemented workflow consists of three stages:
+
+\subsubsection{Experimental Variogram}
+
+The experimental (semi)variogram quantifies spatial grade continuity:
+
+\begin{equation}
+    \hat{\gamma}(h) = \frac{1}{2 |N(h)|} \sum_{(i,j) \in N(h)} \left[ g(\mathbf{x}_i) - g(\mathbf{x}_j) \right]^2
+\end{equation}
+
+where $N(h)$ is the set of data pairs separated by lag distance $h \pm \delta h$. Computed over 15 lag bins up to 60\% of the maximum sample distance.
+
+\subsubsection{Variogram Model Fitting}
+
+Three theoretical models are supported (fitted by least-squares grid search):
+
+\begin{align}
+    \gamma_{\text{sph}}(h) &= C_0 + C \left[ \frac{3h}{2a} - \frac{1}{2}\left(\frac{h}{a}\right)^3 \right], \quad h \leq a \\
+    \gamma_{\text{exp}}(h) &= C_0 + C \left[ 1 - e^{-3h/a} \right] \\
+    \gamma_{\text{gau}}(h) &= C_0 + C \left[ 1 - e^{-3(h/a)^2} \right]
+\end{align}
+
+where $C_0$ is the nugget, $C$ is the partial sill, and $a$ is the range parameter.
+
+\subsubsection{Kriging System}
+
+Ordinary Kriging estimates grade at unsampled locations by solving the system:
+
+\begin{equation}
+    \begin{bmatrix} \mathbf{C} & \mathbf{1} \\ \mathbf{1}^T & 0 \end{bmatrix}
+    \begin{bmatrix} \boldsymbol{\lambda} \\ \mu \end{bmatrix}
+    =
+    \begin{bmatrix} \mathbf{c}_0 \\ 1 \end{bmatrix}
+\end{equation}
+
+where $\mathbf{C}$ is the covariance matrix between sample pairs, $\mathbf{c}_0$ is the vector of covariances between samples and the estimation point, $\boldsymbol{\lambda}$ are the kriging weights, and $\mu$ is the Lagrange multiplier enforcing the unbiasedness condition $\sum \lambda_i = 1$. The kriging variance $\sigma^2_K = C(0) - \boldsymbol{\lambda}^T \mathbf{c}_0 - \mu$ provides spatial uncertainty estimates. A moving neighborhood of up to 20 nearest samples is used for scalability.
+
+% -----------------------------------------------------------
+\subsection{Multi-Scenario Comparison}
+\label{sec:scenarios}
+
+The scenario management system allows mine planners to run the full optimization pipeline under different economic assumptions (gold price, cutoff grade, stope dimensions) and compare results side-by-side. Each scenario stores a snapshot of the economic parameters and optimization summary. The comparison dashboard presents four charts: NPV estimate, ore tonnage, average grade, and stope count across all scenarios.
 
 % ============================================================
 \section{Results}
@@ -506,48 +560,80 @@ Automated_Underground_Mine_design/
 \section{Future Works}
 \label{sec:future}
 
-The following enhancements would further increase the platform's value for research and industry application:
+The platform already implements Phases 1--7 covering block model generation, economic evaluation, BILP stope optimization, mine layout, Monte Carlo simulation, ML grade prediction, production scheduling, geotechnical assessment, Ordinary Kriging, and multi-scenario comparison. The following directions represent the next frontier of research and development:
 
-\subsection{Multi-Scenario Comparison}
-Allow users to save and compare multiple optimization runs side-by-side with different parameters (gold price, cutoff grade, stope dimensions). This would enable rapid what-if analysis for strategic mine planning, similar to the scenario management capabilities in commercial tools like Deswik.Stope.
+% --- Near-term ---
+\subsection{Real Drillhole Data Integration}
+Support direct import of exploration drillhole assay data (CSV, Surpac DAT, Leapfrog CSV) including collar, survey, and assay tables. The platform would composite downhole assays to block centroids, replacing the synthetic model with actual deposit data. This is the single most impactful near-term extension, enabling the system to be applied to live feasibility studies.
 
-\subsection{Real Data Integration (CSV Upload)}
-Support importing real block model data from CSV or mining software exports (Surpac, Vulcan, Leapfrog). This would allow the platform to work with actual orebody data from exploration drilling programs, extending beyond synthetic models.
-
-\subsection{Geostatistical Grade Estimation}
-Integrate kriging methods (Ordinary Kriging, Simple Kriging, Indicator Kriging) alongside the existing ML-based grade prediction. Variogram modeling ($\gamma(h)$) and cross-validation would provide industry-standard geostatistical estimates compliant with JORC/NI~43-101 reporting standards.
+\subsection{Advanced Kriging Variants}
+Extend the current Ordinary Kriging implementation to include:
+\begin{itemize}[itemsep=0.1em]
+    \item \textbf{Simple Kriging (SK):} assumes stationary mean, appropriate when the global mean is known
+    \item \textbf{Indicator Kriging (IK):} estimates probability of grade exceeding a threshold, enabling probabilistic resource classification (Measured / Indicated / Inferred per JORC/NI~43-101)
+    \item \textbf{Sequential Gaussian Simulation (SGS):} generates multiple equiprobable grade realisations, providing a full uncertainty model for risk-based resource estimation
+\end{itemize}
 
 \subsection{Backfill Optimization}
-Model cemented rockfill (CRF) and paste fill requirements for extracted stopes. Optimize the fill sequence to maintain ground stability while maximizing ore recovery through secondary stoping---a critical consideration in long-hole open stoping operations.
+Model cemented rockfill (CRF) and paste fill requirements for extracted stopes. Backfill decisions are interdependent---filling a primary stope unlocks adjacent secondary stopes for extraction. The optimization problem can be formulated as a network flow model:
+\begin{equation}
+    \text{Minimize:} \quad C_{\text{fill}} \cdot \sum_i V_i^{\text{fill}} \quad \text{subject to: fill before secondary mining}
+\end{equation}
+This is essential for sub-level open stoping and longhole retreat mining methods where the primary/secondary sequencing governs dilution and ground stability.
 
 \subsection{Ventilation Network Design}
-Automatically generate a ventilation network layout based on the development and stope geometry. Calculate airflow requirements, fan sizing, and ensure compliance with regulatory limits (diesel particulate matter, heat stress) for underground personnel and equipment.
+Automatically generate a ventilation circuit based on the development network and stope geometry. Using Hardy Cross or LP-based airflow optimization, the system would:
+\begin{itemize}[itemsep=0.1em]
+    \item Calculate airflow requirements per working face (diesel equipment, blasting re-entry)
+    \item Size fans and determine booster fan locations
+    \item Verify compliance with regulatory limits: $\geq 0.06\,\text{m}^3/\text{s}$ per kW of diesel, $<27^\circ$C wet bulb temperature
+\end{itemize}
 
-\subsection{Real-Time Production Tracking}
-Add a production dashboard that tracks actual vs.\ planned tonnage, grade, and metal production per period. This would transform the tool from a planning platform into an operational monitoring system, enabling grade control reconciliation.
+\subsection{Dynamic Grade Control}
+Extend the production scheduler to incorporate real-time blast sampling data and reconcile planned vs.\ actual grade per period. Grade control reconciliation---comparing resource model grades to mill feed---is a standard operational KPI at every producing mine. The platform would track:
+\begin{itemize}[itemsep=0.1em]
+    \item F-factor (predicted vs.\ actual tonnage reconciliation)
+    \item Grade reconciliation by stope and period
+    \item Cumulative metal deviation from mine plan
+\end{itemize}
 
-\subsection{3D Geological Modeling}
-Integrate implicit geological modeling (radial basis functions or signed distance fields) to define ore zone boundaries, fault planes, and lithological contacts. This geological context would improve both stope generation constraints and geotechnical assessments.
+\subsection{3D Implicit Geological Modeling}
+Integrate signed distance field (SDF) or radial basis function (RBF) implicit modeling to delineate ore zone boundaries, faults, and lithological contacts from drillhole data. The geological wireframes would constrain stope generation (no stopes crossing geological boundaries) and improve geotechnical assessment (fault proximity hazard).
 
-\subsection{Multi-Objective Optimization}
-Extend the BILP formulation to handle multiple objectives simultaneously using $\epsilon$-constraint or weighted-sum methods:
+\subsection{Multi-Objective Stope Optimization}
+Extend the BILP formulation to simultaneously optimize NPV, geotechnical risk, and development cost using the $\varepsilon$-constraint method:
 
+\begin{align}
+    \text{Maximize:} \quad & \alpha_1 \cdot \text{NPV} - \alpha_2 \cdot R_{\text{geo}} - \alpha_3 \cdot C_{\text{dev}} \\
+    \text{Subject to:} \quad & R_{\text{geo}} \leq \varepsilon_{\text{risk}}, \quad C_{\text{dev}} \leq \varepsilon_{\text{capex}}
+\end{align}
+
+Pareto frontier visualization across the NPV--Risk--Cost space would let mine planners select a preferred trade-off point, moving beyond single-objective optimization.
+
+\subsection{Stochastic Stope Optimization Under Grade Uncertainty}
+Rather than optimizing on the deterministic grade estimate, generate $K$ conditional simulations of the grade field (via SGS) and solve the stope optimization on each. The result is a distribution of optimal stope layouts, enabling probabilistic selection of stopes with high probability of economic viability:
 \begin{equation}
-    \text{Maximize:} \quad \alpha_1 \cdot \text{NPV} - \alpha_2 \cdot \text{Risk} - \alpha_3 \cdot C_{\text{dev}}
+    \text{Select stope } i \quad \text{if} \quad P(V_i > 0) \geq p_{\min}
 \end{equation}
 
-Pareto frontier visualization would help mine planners balance competing goals (e.g., maximize NPV while minimizing geotechnical risk or development cost).
+\subsection{Reserve Reporting Module}
+Generate JORC/NI~43-101 compliant reserve summary tables with tonnage and grade by resource classification (Measured, Indicated, Inferred), cutoff grade sensitivity, and pit/stope shell economics. Currently the platform computes in-pit/in-stope economics but does not format them for formal reporting.
 
-\subsection{Cloud-Native Deployment}
-Containerize the application with Docker, implement a job queue (Celery + Redis) for long-running optimizations, and add user authentication (OAuth2). This would support multi-user access, persistent sessions, and enterprise deployment scenarios.
+\subsection{Digital Twin Integration}
+Connect the platform to underground mine sensors (blast monitoring, seismic networks, real-time vehicle tracking) via MQTT or REST data streams. The digital twin would update the geotechnical model in real time as mining progresses, flagging stopes where measured rock behaviour diverges from design assumptions.
+
+\subsection{Cloud-Native Multi-User Deployment}
+Containerize the application with Docker and Kubernetes, replace the in-memory cache with Redis or PostgreSQL, and add OAuth2 authentication. A Celery + Redis job queue would handle concurrent long-running optimizations. This would support project-level collaboration where geologists, engineers, and planners each have role-specific views of the same underlying model.
 
 % ============================================================
 \section{Conclusion}
 \label{sec:conclusion}
 
-MineOptima demonstrates that modern computational methods---operations research, machine learning, and stochastic simulation---can be integrated into a single, accessible web platform for automated underground mine design. The system addresses the specific challenges of gold deposit modeling (nugget effect, log-normal grade distributions, narrow vein structures) while providing provably optimal stope layouts, probabilistic risk quantification, and integrated geotechnical assessment.
+This project demonstrates that modern computational methods---operations research, machine learning, geostatistics, and stochastic simulation---can be integrated into a single, accessible web platform for automated underground gold mine design. Across seven implementation phases, the system now covers the full mine planning chain: from geological block model generation through BILP stope optimization, mine layout, Monte Carlo risk analysis, ML and geostatistical grade estimation, production scheduling with DCF analysis, geotechnical stability assessment, and multi-scenario strategic comparison.
 
-The platform reduces the mine design cycle from days or weeks of manual iteration to under 60 seconds of automated computation, while producing solutions that are mathematically guaranteed to be optimal (within the BILP formulation). By making these capabilities available through a browser-based interface, the system democratizes access to advanced mine planning tools that traditionally require expensive commercial software licenses and specialist expertise.
+The platform reduces the mine design cycle from days or weeks of manual iteration to under 60 seconds of automated computation. The BILP formulation provides provably optimal stope layouts; the Monte Carlo engine quantifies project risk with full NPV distributions; Ordinary Kriging delivers industry-standard resource estimates; and the Mathews method provides geotechnical risk classification---all within a single browser-based interface accessible without expensive commercial software licenses.
+
+The gold-specific geological model, with its log-normal grade distribution (CV~$\approx$180\%), nugget effect, and vein-hosted structures, accurately captures the characteristics that distinguish gold from base-metal deposits and make it one of the most challenging commodities for resource estimation. The 11-tab interactive dashboard makes these advanced methods accessible to mining engineering students, researchers, and industry practitioners alike.
 
 % ============================================================
 \begin{thebibliography}{9}
@@ -575,6 +661,15 @@ E.A. Villalba Matamoros and M., ``Underground mine planning: stope layout optimi
 
 \bibitem{wgc2023}
 World Gold Council, ``Gold mine cost benchmarks,'' \textit{All-In Sustaining Cost Report}, 2023. Available: \url{https://www.gold.org/}
+
+\bibitem{isaaks1989}
+E.H. Isaaks and R.M. Srivastava, \textit{An Introduction to Applied Geostatistics}, Oxford University Press, 1989.
+
+\bibitem{chilès2012}
+J.-P. Chil\`{e}s and P. Delfiner, \textit{Geostatistics: Modeling Spatial Uncertainty}, 2nd ed., Wiley, 2012.
+
+\bibitem{deutsch1998}
+C.V. Deutsch and A.G. Journel, \textit{GSLIB: Geostatistical Software Library and User's Guide}, 2nd ed., Oxford University Press, 1998.
 
 \end{thebibliography}
 

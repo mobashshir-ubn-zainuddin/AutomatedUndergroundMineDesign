@@ -15,6 +15,7 @@ from monte_carlo import run_monte_carlo
 from grade_prediction import train_grade_model
 from production_scheduler import schedule_production
 from geotechnical import assess_stability
+from kriging import run_kriging_analysis
 
 import numpy as np
 import pandas as pd
@@ -44,6 +45,11 @@ def np_safe(obj):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/healthz")
+def healthz():
+    return jsonify({"status": "ok", "service": "automated-underground-mine-design"})
 
 
 @app.route("/api/generate-block-model", methods=["POST"])
@@ -364,6 +370,110 @@ def api_ml_uncertainty():
         "predicted_grade": section["predicted_grade"].tolist(),
         "uncertainty": section["uncertainty"].tolist(),
     }))
+
+
+@app.route("/api/scenarios", methods=["GET"])
+def api_scenarios_list():
+    scenarios = cache.get("scenarios", {})
+    return jsonify(np_safe([
+        {
+            "id": sid,
+            "name": s["name"],
+            "gold_price": s["econ_params"]["gold_price"],
+            "total_value": s["opt_result"]["total_value"],
+            "total_tonnage": s["opt_result"]["total_tonnage"],
+            "n_selected": s["opt_result"]["n_selected"],
+            "total_metal_oz": s["opt_result"]["total_metal_oz"],
+        }
+        for sid, s in scenarios.items()
+    ]))
+
+
+@app.route("/api/scenarios/save", methods=["POST"])
+def api_scenarios_save():
+    if "opt_result" not in cache or not cache["opt_result"]["selected"]:
+        return jsonify({"error": "Run optimization first"}), 400
+
+    p = request.json
+    name = p.get("name", f"Scenario {len(cache.get('scenarios', {})) + 1}")
+    sid = f"s{len(cache.get('scenarios', {})) + 1}"
+
+    if "scenarios" not in cache:
+        cache["scenarios"] = {}
+
+    cache["scenarios"][sid] = {
+        "name": name,
+        "econ_params": cache["econ_params"].copy(),
+        "block_size": cache["block_size"],
+        "opt_result": {
+            "status": cache["opt_result"]["status"],
+            "n_candidates": cache["opt_result"]["n_candidates"],
+            "n_selected": cache["opt_result"]["n_selected"],
+            "total_value": cache["opt_result"]["total_value"],
+            "total_tonnage": cache["opt_result"]["total_tonnage"],
+            "total_metal_oz": cache["opt_result"]["total_metal_oz"],
+        },
+        "selected_summary": [
+            {k: s[k] for k in ["stope_id", "avg_grade", "total_value", "total_tonnage", "total_metal_oz"]}
+            for s in cache["opt_result"]["selected"]
+        ],
+    }
+
+    return jsonify({"saved": sid, "name": name, "total": len(cache["scenarios"])})
+
+
+@app.route("/api/scenarios/compare", methods=["POST"])
+def api_scenarios_compare():
+    scenarios = cache.get("scenarios", {})
+    if len(scenarios) < 2:
+        return jsonify({"error": "Save at least 2 scenarios first"}), 400
+
+    comparison = []
+    for sid, s in scenarios.items():
+        ep = s["econ_params"]
+        opt = s["opt_result"]
+        total_revenue = opt["total_metal_oz"] * ep["gold_price"]
+        total_cost = opt["total_tonnage"] * (ep["mining_cost"] + ep["processing_cost"] + ep["ga_cost"])
+        npv_est = total_revenue - total_cost
+        comparison.append({
+            "id": sid,
+            "name": s["name"],
+            "gold_price": ep["gold_price"],
+            "mining_cost": ep["mining_cost"],
+            "recovery_pct": round(ep["recovery"] * 100, 1),
+            "n_selected": opt["n_selected"],
+            "total_value": opt["total_value"],
+            "total_tonnage": opt["total_tonnage"],
+            "total_metal_oz": opt["total_metal_oz"],
+            "npv_estimate": round(npv_est, 2),
+        })
+
+    return jsonify(np_safe(comparison))
+
+
+@app.route("/api/scenarios/delete/<sid>", methods=["DELETE"])
+def api_scenarios_delete(sid):
+    scenarios = cache.get("scenarios", {})
+    if sid not in scenarios:
+        return jsonify({"error": "Scenario not found"}), 404
+    del scenarios[sid]
+    return jsonify({"deleted": sid})
+
+
+@app.route("/api/kriging", methods=["POST"])
+def api_kriging():
+    if "block_model" not in cache:
+        return jsonify({"error": "Generate block model first"}), 400
+
+    p = request.json
+    variogram_model = p.get("variogram_model", "spherical")
+    result = run_kriging_analysis(
+        cache["block_model"],
+        variogram_model=variogram_model,
+        test_fraction=p.get("test_fraction", 0.2),
+    )
+    cache["kriging_result"] = result
+    return jsonify(np_safe(result))
 
 
 @app.route("/api/schedule", methods=["POST"])
