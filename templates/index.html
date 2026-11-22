@@ -566,7 +566,43 @@
 
       <!-- TAB 13: Bolani Data Explorer -->
       <div class="tab-content" id="tab-bolani">
-        <div id="bolani-status" class="status-msg info">Load the Bolani iron ore drillhole dataset to explore composites, block model, and grade distributions.</div>
+        <div id="bolani-status" class="status-msg info">Load the Bolani iron ore drillhole dataset — or upload your own CSV files below.</div>
+
+        <!-- CSV Upload section -->
+        <details style="margin-bottom:1rem;border:1px solid var(--border);border-radius:8px;padding:0.75rem 1rem">
+          <summary style="cursor:pointer;font-weight:600;color:var(--accent);font-size:0.9rem">📤 Upload Your Own Drillhole CSVs</summary>
+          <div style="margin-top:0.75rem;display:grid;gap:0.5rem">
+            <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 0.5rem">
+              Upload standard Surpac-style CSVs. <b>Collar</b> and <b>Assay</b> are required. Geology and Survey are optional.<br>
+              Collar must have columns: <code>bh_no</code>, <code>e/easting</code>, <code>n/northing</code>, <code>z/elevation</code>, <code>depth</code>.<br>
+              Assay must have: <code>bh_no</code>, <code>from</code>, <code>to</code>, and one or more grade columns (fe, au, cu, etc.).
+            </p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.5rem">
+              <label style="font-size:0.82rem">
+                <span style="color:var(--text-muted)">Collar CSV <span style="color:#f43f5e">*</span></span><br>
+                <input type="file" id="csv-collar" accept=".csv" style="margin-top:0.25rem;font-size:0.8rem;color:var(--text)">
+              </label>
+              <label style="font-size:0.82rem">
+                <span style="color:var(--text-muted)">Assay CSV <span style="color:#f43f5e">*</span></span><br>
+                <input type="file" id="csv-assay" accept=".csv" style="margin-top:0.25rem;font-size:0.8rem;color:var(--text)">
+              </label>
+              <label style="font-size:0.82rem">
+                <span style="color:var(--text-muted)">Geology CSV (optional)</span><br>
+                <input type="file" id="csv-geology" accept=".csv" style="margin-top:0.25rem;font-size:0.8rem;color:var(--text)">
+              </label>
+              <label style="font-size:0.82rem">
+                <span style="color:var(--text-muted)">Survey CSV (optional)</span><br>
+                <input type="file" id="csv-survey" accept=".csv" style="margin-top:0.25rem;font-size:0.8rem;color:var(--text)">
+              </label>
+            </div>
+            <div style="display:flex;gap:0.75rem;align-items:center;margin-top:0.5rem">
+              <button class="btn btn-primary btn-sm" onclick="uploadCSVData()">⬆ Upload &amp; Visualise</button>
+              <span id="csv-status" style="font-size:0.82rem;color:var(--text-muted)"></span>
+            </div>
+            <div id="csv-preview" style="display:none;overflow-x:auto;max-height:200px;overflow-y:auto;font-size:0.78rem"></div>
+          </div>
+        </details>
+
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
           <button class="btn btn-primary" onclick="loadBolani()">📂 Load Bolani Dataset</button>
           <button class="btn btn-outline btn-sm" onclick="buildBolaniBlockModel()" id="btn-bolani-bm" disabled>🧊 Build Block Model</button>
