@@ -6,7 +6,7 @@
 
 An integrated computational platform that automates the full underground mine design pipeline — from raw drillhole data through to JORC reserve reporting, risk-adjusted stope optimization, ventilation design, and backfill scheduling — all in a single browser-based interface.
 
-Built with a **Flask + Python** backend and an interactive **Plotly.js** frontend (19 tabs).
+Built with a **Flask + Python** backend and an interactive **Plotly.js** frontend (19 tabs, 30 API endpoints).
 
 ---
 
@@ -56,12 +56,13 @@ Built with a **Flask + Python** backend and an interactive **Plotly.js** fronten
 
 ### Phase 8 — Advanced Modules (Latest)
 
-#### Bolani Iron Ore Dataset
+#### Bolani Iron Ore Dataset & CSV Upload
 - Real Surpac drillhole data (collar, survey, assay, geology) for the Bolani iron ore deposit, Jharkhand, India
 - 29 drillholes, 585 composites (Fe%, SiO₂%, Al₂O₃%)
 - **Drillhole Depth Profile Viewer:** select any individual drillhole or overlay all; choose Fe / SiO₂ / Al₂O₃; colour by lithology; depth log, box plot by lithocode, mean±σ bar chart across drillholes
 - IDW block model from composites with transparent 3D viewer and grade-range filter
 - Fe% normal and log-normal distribution histograms, Fe–SiO₂ and Fe–Al₂O₃ scatter plots, experimental variogram
+- **CSV Upload (new):** upload your own collar + assay CSV files (+ optional geology/survey) to run all analyses on any deposit. Automatic column detection handles standard Surpac and non-standard formats. All downstream tabs (block model, reserve report, kriging, stochastic opt.) use the uploaded data.
 
 #### Advanced Kriging Variants
 - **Simple Kriging (SK):** uses a known global mean; cross-validated with R², RMSE, 3D grade map
@@ -150,7 +151,7 @@ Automated_Underground_Mine_design/
 │   └── js/app.js                 # Frontend logic — API calls, Plotly charts
 │
 └── report/
-    ├── report.tex                # LaTeX source (22-page technical report)
+    ├── report.tex                # LaTeX source (25-page technical report)
     └── report.pdf                # Compiled PDF
 ```
 
@@ -280,6 +281,7 @@ Follow this recommended workflow through the 19 tabs:
 | `/api/implicit-geology` | POST | RBF implicit geological model |
 | `/api/ventilation` | POST | Hardy Cross ventilation circuit |
 | `/api/backfill` | POST | Network flow backfill optimizer |
+| `/api/csv/upload` | POST | Upload custom collar+assay CSV files |
 
 ---
 
