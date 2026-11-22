@@ -84,16 +84,20 @@ This report presents \textbf{MineOptima}, an integrated computational platform f
 
 Underground mine design is a complex, multi-disciplinary engineering challenge that integrates geology, rock mechanics, economics, and operations research. Traditional practice relies on sequential manual workflows across disconnected commercial software packages (Surpac, Deswik, Datamine), where mine planners manually define stope boundaries through trial-and-error iteration over days to weeks.
 
-This project develops \textbf{MineOptima}, an automated platform that integrates the entire underground mine design pipeline into a single web-based application. The key contributions are:
+This project develops \textbf{MineOptima}, an automated platform that integrates the full underground mine design pipeline into a single web-based application across eight implementation phases. The key contributions are:
 
 \begin{enumerate}[itemsep=0.3em]
     \item A geologically calibrated synthetic block model for Archean lode gold deposits with realistic nugget effect and vein-hosted grade structures.
     \item A floating stope algorithm coupled with Binary Integer Linear Programming (BILP) for provably optimal stope layout selection.
     \item Monte Carlo simulation for NPV risk quantification under price, grade, and cost uncertainty.
-    \item Random Forest machine learning for grade prediction with per-block uncertainty quantification.
-    \item Grade-priority production scheduling with Discounted Cash Flow analysis.
-    \item Geotechnical stability assessment using the Mathews stability graph method and pillar Factor of Safety analysis.
-    \item A responsive web dashboard with 9 interactive tabs for real-time parameter exploration.
+    \item Random Forest and Gradient Boosting machine learning for grade prediction with per-block uncertainty quantification.
+    \item Grade-priority production scheduling with Discounted Cash Flow analysis and geotechnical stability assessment (Mathews method, pillar Factor of Safety).
+    \item A complete geostatistical suite: Ordinary Kriging (OK), Simple Kriging (SK), Indicator Kriging (IK), and Sequential Gaussian Simulation (SGS), with variogram modeling and cross-validation.
+    \item Integration of real Surpac drillhole data from the Bolani iron ore deposit (India), with IDW block model generation and interactive drillhole depth profile viewer.
+    \item JORC~2012 / NI~43-101 compliant reserve reporting with Measured/Indicated/Inferred classification and cutoff grade sensitivity.
+    \item Stochastic stope optimization under grade uncertainty and multi-objective optimization with $\varepsilon$-constraint Pareto frontier.
+    \item 3D implicit geological modeling via Radial Basis Function signed distance fields; Hardy Cross ventilation circuit design; and network flow backfill optimization.
+    \item A responsive 19-tab web dashboard with interactive 3D Plotly visualizations for all modules.
 \end{enumerate}
 
 \subsection{Why Gold is Different}
@@ -374,8 +378,8 @@ Deployment & Render (cloud), Gunicorn (WSGI) \\
 The application follows a RESTful API architecture:
 
 \begin{itemize}[itemsep=0.2em]
-    \item \textbf{Backend:} Flask serves 16 API endpoints including a \texttt{/healthz} health check for cloud deployment monitoring. An in-memory cache stores intermediate results (block model, optimization output, scenarios) across sequential analysis steps.
-    \item \textbf{Frontend:} A responsive, dark-themed single-page application with 11 interactive tabs. All charts are rendered client-side using Plotly.js for fast, GPU-accelerated visualization. Per-tab inline loading indicators provide non-blocking UX during long computations.
+    \item \textbf{Backend:} Flask serves 29 REST API endpoints including a \texttt{/healthz} health check for cloud deployment monitoring. An in-memory cache stores all intermediate results (block model, optimization output, drillhole data, scenarios, ventilation, backfill) across sequential analysis steps.
+    \item \textbf{Frontend:} A responsive, dark-themed single-page application with 19 interactive tabs. All charts are rendered client-side using Plotly.js for GPU-accelerated 2D and 3D visualization. Per-tab inline loading indicators provide non-blocking UX during long computations.
     \item \textbf{Landing page:} Features section, data calibration details, and an industry comparison table highlighting differences from traditional workflows.
 \end{itemize}
 
@@ -414,6 +418,10 @@ The application follows a RESTful API architecture:
 \texttt{/api/implicit-geology} & POST & RBF implicit geological model \\
 \texttt{/api/ventilation} & POST & Hardy Cross ventilation design \\
 \texttt{/api/backfill} & POST & Network flow backfill optimizer \\
+\texttt{/api/kriging/simple} & POST & Simple Kriging (SK) with cross-validation \\
+\texttt{/api/kriging/indicator} & POST & Indicator Kriging (IK) — resource classification \\
+\texttt{/api/kriging/sgs} & POST & Sequential Gaussian Simulation (SGS) \\
+\texttt{/api/bolani/drillhole-profile} & POST & Depth profile for selected element/drillhole \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -430,7 +438,16 @@ The Bolani iron ore deposit (Jharkhand, India) drillhole dataset, exported from 
   \item Composites are desurveyed to 3D coordinates and IDW-interpolated onto a regular block grid
 \end{itemize}
 
-The platform renders an interactive 3D drillhole viewer coloured by Fe grade, normal/log-normal distribution histograms, Fe--SiO$_2$ and Fe--Al$_2$O$_3$ scatter plots, Fe vs depth profiles, and an experimental variogram — replicating the standard Surpac analytical suite in the browser.
+The platform renders:
+\begin{itemize}
+  \item Interactive 3D drillhole viewer coloured by Fe grade, with per-hole path display
+  \item \textbf{Drillhole Depth Profile Viewer:} select any individual drillhole or overlay all; choose Fe\%, SiO$_2$\%, or Al$_2$O$_3$\%; colour segments by lithology; view depth log, box plots per lithocode, and mean$\pm\sigma$ bar chart across all drillholes
+  \item Normal and log-normal Fe\% distribution histograms; ln(SiO$_2$\%) histogram
+  \item Fe vs SiO$_2$\% and Fe vs Al$_2$O$_3$\% scatter plots coloured by lithocode
+  \item IDW block model with transparent 3D viewer and grade-range filter slider
+  \item Experimental variogram for the Fe\% variable
+\end{itemize}
+This replicates the standard Surpac analytical workflow entirely within the browser, without requiring Surpac or any other commercial software.
 
 % -----------------------------------------------------------
 \subsection{Reserve Reporting (JORC / NI 43-101)}
@@ -670,7 +687,7 @@ Automated_Underground_Mine_design/
 \section{Future Works}
 \label{sec:future}
 
-The platform now implements a comprehensive 18-tab pipeline covering: block model generation, economic evaluation, BILP stope optimization, mine layout, Monte Carlo simulation, ML grade prediction, production scheduling, geotechnical assessment, Ordinary Kriging, multi-scenario comparison, Bolani real-data integration, JORC reserve reporting, stochastic stope optimization, multi-objective Pareto optimization, 3D implicit geological modeling, ventilation network design, and backfill optimization. The following directions represent the next frontier of research and development:
+The platform now implements a comprehensive 19-tab pipeline (Phases 1--8) covering: block model generation, economic evaluation, BILP stope optimization, mine layout, Monte Carlo simulation, ML grade prediction, production scheduling, geotechnical assessment, Ordinary/Simple/Indicator Kriging and SGS, multi-scenario comparison, Bolani real drillhole data integration with depth profile viewer, JORC reserve reporting, stochastic stope optimization, multi-objective Pareto optimization, 3D implicit geological modeling, ventilation network design, and backfill optimization. The following directions represent the next frontier of research and development:
 
 % --- Near-term ---
 \subsection{Advanced Kriging Variants}
@@ -732,13 +749,27 @@ Connect the production schedule to enterprise resource planning (ERP) systems (S
 \section{Conclusion}
 \label{sec:conclusion}
 
-This project demonstrates that modern computational methods---operations research, machine learning, geostatistics, and stochastic simulation---can be integrated into a single, accessible web platform for automated underground gold mine design. Across seven implementation phases, the system now covers the full mine planning chain: from geological block model generation through BILP stope optimization, mine layout, Monte Carlo risk analysis, ML and geostatistical grade estimation, production scheduling with DCF analysis, geotechnical stability assessment, and multi-scenario strategic comparison.
+This project demonstrates that modern computational methods---operations research, machine learning, geostatistics, and stochastic simulation---can be integrated into a single, accessible web platform for automated underground gold mine design. Across eight implementation phases, the system covers the full mine planning chain:
+
+\begin{itemize}[itemsep=0.2em]
+  \item Geological block model generation with gold-specific grade statistics (nugget effect, log-normal distribution, CV $\approx$ 180\%)
+  \item Floating stope candidate generation and provably optimal BILP stope layout selection
+  \item Mine development network generation with cost estimation
+  \item Deterministic NPV calculation, Monte Carlo risk quantification (price/grade/cost uncertainty), and tornado sensitivity analysis
+  \item Random Forest and Gradient Boosting grade prediction with per-block uncertainty
+  \item Grade-priority production scheduling with DCF analysis and geotechnical stability assessment (Mathews method, pillar Factor of Safety)
+  \item Full geostatistical suite: Ordinary Kriging, Simple Kriging, Indicator Kriging (resource classification), and Sequential Gaussian Simulation
+  \item Real drillhole data integration (Bolani iron ore, Surpac export): IDW block model, depth profile viewer, distribution analysis, scatter plots
+  \item JORC~2012 / NI~43-101 compliant reserve reporting with Measured/Indicated/Inferred classification
+  \item Stochastic stope optimization under grade uncertainty and $\varepsilon$-constraint multi-objective optimization with Pareto frontier
+  \item 3D implicit geological modelling (RBF signed distance field), Hardy Cross ventilation circuit design, and network flow backfill optimization
+\end{itemize}
 
 The platform reduces the mine design cycle from days or weeks of manual iteration to under 60 seconds of automated computation. The BILP formulation provides provably optimal stope layouts; the Monte Carlo engine quantifies project risk with full NPV distributions; Ordinary Kriging delivers industry-standard resource estimates; and the Mathews method provides geotechnical risk classification---all within a single browser-based interface accessible without expensive commercial software licenses.
 
 The gold-specific geological model, with its log-normal grade distribution (CV~$\approx$180\%), nugget effect, and vein-hosted structures, accurately captures the characteristics that distinguish gold from base-metal deposits and make it one of the most challenging commodities for resource estimation. Integration of the real Bolani iron ore drillhole dataset further validates the platform's flexibility across commodity types and geological settings.
 
-The 18-tab interactive dashboard --- spanning JORC reserve reporting, stochastic and multi-objective stope optimization, 3D implicit geological modeling, ventilation circuit design, and backfill scheduling --- represents a substantial step towards a comprehensive, open-source mine planning environment. These advanced methods, previously accessible only through expensive commercial software requiring specialist training, are now available to mining engineering students, researchers, and industry practitioners via a web browser.
+The 19-tab interactive dashboard --- spanning JORC reserve reporting, all four kriging variants, stochastic and multi-objective stope optimization, 3D implicit geological modeling, ventilation circuit design, backfill scheduling, and an interactive drillhole depth profile viewer --- represents a substantial step towards a comprehensive, open-source mine planning environment. These advanced methods, previously accessible only through expensive commercial software requiring specialist training, are now available to mining engineering students, researchers, and industry practitioners via a web browser, with no installation required beyond a web browser.
 
 % ============================================================
 \begin{thebibliography}{9}
