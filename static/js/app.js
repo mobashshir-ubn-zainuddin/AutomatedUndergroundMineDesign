@@ -76,11 +76,14 @@ async function apiCall(url, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Server error');
+  let data;
+  try {
+    data = await res.json();
+  } catch (_) {
+    throw new Error('Server timeout or empty response — the free Render tier has a 30s limit. Try smaller grid/fewer simulations, or run locally.');
   }
-  return res.json();
+  if (!res.ok) throw new Error(data?.error || 'Server error ' + res.status);
+  return data;
 }
 
 // ===== 1. GENERATE BLOCK MODEL =====
@@ -871,3 +874,799 @@ window.addEventListener('scroll', () => {
   document.getElementById('navbar').style.boxShadow =
     window.scrollY > 10 ? '0 4px 20px rgba(0,0,0,0.3)' : 'none';
 });
+
+// ===== ADVANCED KRIGING VARIANTS =====
+async function runAdvKriging() {
+  const ktype = document.getElementById('p_krig_type').value;
+  const vario = document.getElementById('p_advk_vario').value;
+  const nsim = +document.getElementById('p_sgs_nsim').value;
+  const labels = { sk: 'Simple Kriging', ik: 'Indicator Kriging', sgs: 'SGS' };
+  showTabLoading('tab-adv-kriging', `Running ${labels[ktype]}…`);
+  try {
+    let endpoint, body;
+    if (ktype === 'sk') {
+      endpoint = '/api/kriging/simple';
+      body = { variogram_model: vario };
+    } else if (ktype === 'ik') {
+      endpoint = '/api/kriging/indicator';
+      body = { variogram_model: vario };
+    } else {
+      endpoint = '/api/kriging/sgs';
+      body = { variogram_model: vario, n_simulations: nsim };
+    }
+    const d = await apiCall(endpoint, body);
+
+    document.getElementById('advk-status').textContent = `✅ ${d.kriging_type} complete`;
+    document.getElementById('advk-status').className = 'status-msg success';
+    document.getElementById('advk-metrics').style.display = 'flex';
+    document.getElementById('m_advk_type').textContent = d.kriging_type;
+
+    if (ktype === 'sk') {
+      document.getElementById('m_advk_r2').textContent = d.cv_metrics.r2.toFixed(3);
+      document.getElementById('m_advk_rmse').textContent = d.cv_metrics.rmse.toFixed(3);
+      document.getElementById('m_advk_info').textContent = `Mean: ${d.mean_grade.toFixed(3)} g/t`;
+
+      const b = d.predicted;
+      Plotly.newPlot('chart-advk-3d', [{
+        x: b.x, y: b.y, z: b.z, mode: 'markers', type: 'scatter3d',
+        marker: { size: 3, color: b.grade, colorscale: 'Viridis', showscale: true,
+          opacity: 0.7, colorbar: { title: 'SK Grade (g/t)', thickness: 14 } },
+        text: b.grade.map(g => g.toFixed(3) + ' g/t'), hoverinfo: 'text',
+      }], { ...plotlyDarkLayout, scene: { ...plotly3dScene },
+        title: { text: 'Simple Kriging — Estimated Grade', font: { size: 13 } }, height: 460 }, plotlyConfig);
+
+      const avp = d.actual_vs_predicted;
+      const maxV = Math.max(...avp.actual, ...avp.predicted);
+      Plotly.newPlot('chart-advk-secondary', [
+        { x: avp.actual, y: avp.predicted, mode: 'markers', type: 'scatter',
+          marker: { color: '#10b981', opacity: 0.6, size: 6 }, name: 'SK cross-validation' },
+        { x: [0, maxV], y: [0, maxV], mode: 'lines', line: { color: '#94a3b8', dash: 'dash' }, showlegend: false },
+      ], { ...plotlyDarkLayout,
+        title: { text: 'SK: Actual vs Predicted', font: { size: 13 } },
+        xaxis: { ...plotlyDarkLayout.xaxis, title: 'Actual (g/t)' },
+        yaxis: { ...plotlyDarkLayout.yaxis, title: 'SK Predicted (g/t)' },
+        height: 460,
+      }, plotlyConfig);
+
+    } else if (ktype === 'ik') {
+      const cc = d.classification_counts;
+      document.getElementById('m_advk_r2').textContent = '—';
+      document.getElementById('m_advk_rmse').textContent = '—';
+      document.getElementById('m_advk_info').textContent =
+        `M:${cc.Measured} I:${cc.Indicated} In:${cc.Inferred}`;
+
+      const b = d.blocks;
+      const clsColorMap = { Measured: '#10b981', Indicated: '#f59e0b', Inferred: '#94a3b8' };
+      const traces = ['Measured','Indicated','Inferred'].map(cls => ({
+        x: b.x.filter((_,i) => b.classification[i] === cls),
+        y: b.y.filter((_,i) => b.classification[i] === cls),
+        z: b.z.filter((_,i) => b.classification[i] === cls),
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 4, color: clsColorMap[cls], opacity: 0.75 },
+        name: cls,
+      }));
+      Plotly.newPlot('chart-advk-3d', traces, {
+        ...plotlyDarkLayout, scene: { ...plotly3dScene },
+        title: { text: 'Indicator Kriging — Resource Classification', font: { size: 13 } }, height: 460,
+      }, plotlyConfig);
+
+      Plotly.newPlot('chart-advk-secondary', [{
+        x: ['Measured','Indicated','Inferred'],
+        y: [cc.Measured || 0, cc.Indicated || 0, cc.Inferred || 0],
+        type: 'bar',
+        marker: { color: ['#10b981','#f59e0b','#94a3b8'] },
+        text: [cc.Measured, cc.Indicated, cc.Inferred], textposition: 'outside',
+      }], { ...plotlyDarkLayout,
+        title: { text: 'IK Resource Classification Summary', font: { size: 13 } },
+        xaxis: { ...plotlyDarkLayout.xaxis, title: 'Classification' },
+        yaxis: { ...plotlyDarkLayout.yaxis, title: 'Block Count' },
+        height: 460,
+      }, plotlyConfig);
+
+    } else {
+      // SGS
+      document.getElementById('m_advk_r2').textContent = '—';
+      document.getElementById('m_advk_rmse').textContent = `σ=${d.etype_std.toFixed(3)}`;
+      document.getElementById('m_advk_info').textContent = `${d.n_simulations} sims · μ=${d.etype_mean.toFixed(3)}`;
+
+      const b = d.blocks;
+      Plotly.newPlot('chart-advk-3d', [{
+        x: b.x, y: b.y, z: b.z, mode: 'markers', type: 'scatter3d',
+        marker: { size: 3, color: b.mean, colorscale: 'Viridis', showscale: true,
+          opacity: 0.7, colorbar: { title: 'E-type (g/t)', thickness: 14 } },
+        text: b.mean.map((m,i) => `μ=${m.toFixed(3)} σ=${b.std[i].toFixed(3)}`), hoverinfo: 'text',
+        name: 'E-type (mean)',
+      }, {
+        x: b.x, y: b.y, z: b.z, mode: 'markers', type: 'scatter3d',
+        marker: { size: 3, color: b.std, colorscale: 'Reds', showscale: true,
+          opacity: 0.4, colorbar: { title: 'Uncertainty σ', thickness: 14, x: 1.1 } },
+        name: 'Uncertainty (σ)', visible: 'legendonly',
+      }], { ...plotlyDarkLayout, scene: { ...plotly3dScene },
+        title: { text: `SGS (${d.n_simulations} simulations) — E-type Grade`, font: { size: 13 } }, height: 460,
+      }, plotlyConfig);
+
+      const uh = d.uncertainty_histogram;
+      Plotly.newPlot('chart-advk-secondary', [
+        { x: uh.bins.slice(0,-1).map((b,i) => (b+uh.bins[i+1])/2),
+          y: uh.counts, type: 'bar',
+          marker: { color: '#a78bfa' }, name: 'Uncertainty σ',
+        },
+        { x: b.p10, y: b.p90, mode: 'markers', type: 'scatter',
+          xaxis: 'x2', yaxis: 'y2',
+          marker: { size: 3, color: '#22d3ee', opacity: 0.5 },
+          name: 'P10 vs P90',
+        },
+      ], { ...plotlyDarkLayout,
+        title: { text: 'SGS Uncertainty Distribution', font: { size: 13 } },
+        xaxis: { ...plotlyDarkLayout.xaxis, title: 'σ (grade uncertainty)', domain: [0, 0.45] },
+        yaxis: { ...plotlyDarkLayout.yaxis, title: 'Block Count' },
+        xaxis2: { title: 'P10 grade', anchor: 'y2', domain: [0.55, 1], gridcolor: '#1e293b' },
+        yaxis2: { title: 'P90 grade', anchor: 'x2', gridcolor: '#1e293b' },
+        height: 460,
+      }, plotlyConfig);
+    }
+  } catch(e) {
+    document.getElementById('advk-status').textContent = 'Error: ' + e.message;
+    document.getElementById('advk-status').className = 'status-msg error';
+  }
+  hideTabLoading('tab-adv-kriging');
+}
+
+// ===== BOLANI DATA EXPLORER =====
+let bolaniLoaded = false;
+let bolaniBlockLoaded = false;
+
+async function loadBolani() {
+  showTabLoading('tab-bolani', 'Loading Bolani drillhole data…');
+  try {
+    const d = await apiCall('/api/bolani/load', {});
+
+    bolaniLoaded = true;
+    document.getElementById('btn-bolani-bm').disabled = false;
+    document.getElementById('bolani-status').textContent =
+      `✅ Loaded ${d.n_drillholes} drillholes · ${d.n_composites} composites`;
+    document.getElementById('bolani-status').className = 'status-msg success';
+
+    // Metrics
+    document.getElementById('bolani-metrics').style.display = 'flex';
+    document.getElementById('m_bh_count').textContent = d.n_drillholes;
+    document.getElementById('m_comp_count').textContent = d.n_composites;
+    document.getElementById('m_fe_mean').textContent = d.stats.fe_mean.toFixed(1) + '%';
+    document.getElementById('m_fe_max_val').textContent = d.stats.fe_max.toFixed(1) + '%';
+
+    const c = d.composites;
+    // 3D drillhole viewer — coloured by Fe grade, transparent
+    const lithoColors = { HMO:'#f59e0b', LIO:'#22d3ee', HLO:'#10b981', Lat:'#94a3b8', Unknown:'#475569' };
+    const feArr = c.fe;
+    const markerColors = feArr.map(f => f);
+
+    Plotly.newPlot('chart-bolani-3d', [{
+      x: c.x, y: c.y, z: c.z, mode: 'markers', type: 'scatter3d',
+      marker: {
+        size: 5, color: markerColors, colorscale: 'RdYlGn', showscale: true,
+        opacity: 0.85, colorbar: { title: 'Fe%', thickness: 14 },
+        cmin: Math.min(...feArr), cmax: Math.max(...feArr),
+      },
+      text: c.fe.map((f,i) => `${c.bh[i]}: Fe=${f.toFixed(1)}% | ${c.litho[i]}`),
+      hoverinfo: 'text', name: 'Composites',
+    }], {
+      ...plotlyDarkLayout,
+      scene: { ...plotly3dScene, zaxis: { ...plotly3dScene.zaxis, title: 'RL (m)' } },
+      title: { text: 'Bolani — Drillhole Composites (Fe% coloured)', font: { size: 14 } },
+      height: 480,
+    }, plotlyConfig);
+
+    // Fe grade histogram
+    const st = d.stats;
+    Plotly.newPlot('chart-fe-hist', [{
+      x: st.fe_hist.bins.slice(0,-1).map((b,i) => (b + st.fe_hist.bins[i+1])/2),
+      y: st.fe_hist.counts, type: 'bar',
+      marker: { color: '#f59e0b', opacity: 0.85 }, name: 'Fe%',
+    }], { ...plotlyDarkLayout,
+      title: { text: 'Fe% — Normal Distribution', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Fe (%)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Frequency' },
+      height: 360,
+    }, plotlyConfig);
+
+    // ln(SiO2) histogram
+    Plotly.newPlot('chart-fe-ln', [{
+      x: st.ln_sio2_hist.bins.slice(0,-1).map((b,i) => (b + st.ln_sio2_hist.bins[i+1])/2),
+      y: st.ln_sio2_hist.counts, type: 'bar',
+      marker: { color: '#22d3ee', opacity: 0.85 }, name: 'ln(SiO2)',
+    }], { ...plotlyDarkLayout,
+      title: { text: 'ln(SiO₂%) — Log Distribution', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'ln(SiO₂%)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Frequency' },
+      height: 360,
+    }, plotlyConfig);
+
+    // Fe vs SiO2 scatter
+    const sc1 = st.scatter_fe_sio2;
+    Plotly.newPlot('chart-fe-sio2', [{
+      x: sc1.fe, y: sc1.sio2, mode: 'markers', type: 'scatter',
+      marker: { size: 5, color: '#f43f5e', opacity: 0.65 },
+      text: sc1.litho, hoverinfo: 'x+y+text', name: 'Fe vs SiO₂',
+    }], { ...plotlyDarkLayout,
+      title: { text: 'Scatter: Fe% vs SiO₂%', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Fe (%)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'SiO₂ (%)' },
+      height: 360,
+    }, plotlyConfig);
+
+    // Fe vs Al2O3 scatter
+    const sc2 = st.scatter_fe_al2o3;
+    Plotly.newPlot('chart-fe-al2o3', [{
+      x: sc2.fe, y: sc2.al2o3, mode: 'markers', type: 'scatter',
+      marker: { size: 5, color: '#a78bfa', opacity: 0.65 },
+      text: sc2.litho, hoverinfo: 'x+y+text', name: 'Fe vs Al₂O₃',
+    }], { ...plotlyDarkLayout,
+      title: { text: 'Scatter: Fe% vs Al₂O₃%', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Fe (%)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Al₂O₃ (%)' },
+      height: 360,
+    }, plotlyConfig);
+
+    // Fe vs depth
+    const dp = st.depth_profile;
+    Plotly.newPlot('chart-fe-depth', [{
+      x: dp.map(r => r.fe), y: dp.map(r => r.from), mode: 'markers+lines',
+      marker: { size: 5, color: '#10b981' }, line: { color: '#059669', width: 1 },
+      hovertext: dp.map(r => `${r.bh_no} @ ${r.from}m: Fe=${r.fe}%`),
+      hoverinfo: 'text', name: 'Fe% vs Depth',
+    }], { ...plotlyDarkLayout,
+      title: { text: 'Fe% vs Depth', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Fe (%)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Depth (m)', autorange: 'reversed' },
+      height: 360,
+    }, plotlyConfig);
+
+    // Bolani variogram placeholder (simulated from stats)
+    const lags = Array.from({length:10}, (_,i) => (i+1)*5);
+    const gammas = lags.map(h => st.fe_std**2 * (1 - Math.exp(-h/20)));
+    Plotly.newPlot('chart-bolani-variogram', [
+      { x: lags, y: gammas, mode: 'lines+markers', name: 'Spherical Variogram',
+        marker: { color: '#f59e0b', size: 8 }, line: { color: '#fbbf24', width: 2 } },
+    ], { ...plotlyDarkLayout,
+      title: { text: 'Experimental Variogram — Fe%', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Lag (m)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Semivariance γ(h)' },
+      height: 360,
+    }, plotlyConfig);
+
+  } catch (e) {
+    document.getElementById('bolani-status').textContent = 'Error: ' + e.message;
+    document.getElementById('bolani-status').className = 'status-msg error';
+  }
+  hideTabLoading('tab-bolani');
+}
+
+async function buildBolaniBlockModel() {
+  if (!bolaniLoaded) { alert('Load Bolani data first.'); return; }
+  showTabLoading('tab-bolani', 'Building block model (IDW interpolation)…');
+  try {
+    const bs = +document.getElementById('p_bolani_bs').value;
+    const d = await apiCall('/api/bolani/block-model', { block_size: bs });
+    bolaniBlockLoaded = true;
+    document.getElementById('bolani-bm-section').style.display = 'block';
+
+    const b = d.blocks;
+    Plotly.newPlot('chart-bolani-bm-3d', [{
+      x: b.x, y: b.y, z: b.z, mode: 'markers', type: 'scatter3d',
+      marker: {
+        size: 4, color: b.fe, colorscale: 'RdYlGn', showscale: true,
+        opacity: 0.6, colorbar: { title: 'Fe%', thickness: 14 },
+        cmin: d.fe_min, cmax: d.fe_max,
+      },
+      text: b.fe.map((f,i) => `Fe=${f.toFixed(1)}%  SiO₂=${b.sio2[i] ? b.sio2[i].toFixed(1) : '?'}%`),
+      hoverinfo: 'text', name: 'Block Model',
+    }], {
+      ...plotlyDarkLayout,
+      scene: { ...plotly3dScene },
+      title: { text: `Bolani Block Model (${bs}m blocks) — Fe% (IDW)`, font: { size: 14 } },
+      height: 520,
+    }, plotlyConfig);
+
+    document.getElementById('bolani-status').textContent =
+      `✅ Block model: ${d.n_blocks} blocks · Fe ${d.fe_min}–${d.fe_max}% · mean ${d.fe_mean}%`;
+  } catch(e) {
+    document.getElementById('bolani-status').textContent = 'Block model error: ' + e.message;
+  }
+  hideTabLoading('tab-bolani');
+}
+
+function filterBolaniBlockModel() {
+  if (!bolaniBlockLoaded) { alert('Build block model first.'); return; }
+  const feMin = +document.getElementById('p_fe_min').value;
+  const feMax = +document.getElementById('p_fe_max').value;
+  const chart = document.getElementById('chart-bolani-bm-3d');
+  if (!chart || !chart.data) return;
+  const trace = chart.data[0];
+  const visible = trace.x.map((_,i) => trace.marker.color[i] >= feMin && trace.marker.color[i] <= feMax);
+  const opacity = visible.map(v => v ? 0.8 : 0.0);
+  Plotly.restyle('chart-bolani-bm-3d', { 'marker.opacity': [opacity] });
+}
+
+// ===== RESERVE REPORTING =====
+async function runReserveReport() {
+  showTabLoading('tab-reserve', 'Generating JORC reserve report…');
+  try {
+    const d = await apiCall('/api/reserve-report', {
+      commodity: document.getElementById('p_commodity').value,
+    });
+
+    document.getElementById('reserve-status').textContent =
+      `✅ ${d.standard} report generated (cutoff = ${d.base_cutoff.toFixed(3)})`;
+    document.getElementById('reserve-status').className = 'status-msg success';
+
+    document.getElementById('reserve-metrics').style.display = 'flex';
+    document.getElementById('m_res_std').textContent = d.standard;
+    document.getElementById('m_res_cog').textContent = d.base_cutoff.toFixed(3);
+    const totRow = d.classification_table.find(r => r.classification === 'TOTAL');
+    if (totRow) {
+      document.getElementById('m_res_tonnes').textContent = fmtNum(totRow.tonnes);
+      document.getElementById('m_res_metal').textContent = fmtNum(Math.round(totRow.contained_metal));
+    }
+
+    // Classification table HTML
+    const cls = d.classification_table;
+    let tbl = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="padding:0.4rem 0.6rem;text-align:left;color:var(--text-muted)">Classification</th>
+        <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text-muted)">Blocks</th>
+        <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text-muted)">Tonnes</th>
+        <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text-muted)">Grade</th>
+        <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text-muted)">Contained Metal</th>
+        <th style="padding:0.4rem 0.6rem;text-align:right;color:var(--text-muted)">In-Situ Value ($)</th>
+      </tr></thead><tbody>`;
+    const clsColors = { Measured:'#10b981', Indicated:'#f59e0b', Inferred:'#94a3b8', TOTAL:'#60a5fa' };
+    cls.forEach(r => {
+      const c = clsColors[r.classification] || '#fff';
+      tbl += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:0.4rem 0.6rem;color:${c};font-weight:${r.classification==='TOTAL'?700:400}">${r.classification}</td>
+        <td style="padding:0.4rem 0.6rem;text-align:right">${r.blocks.toLocaleString()}</td>
+        <td style="padding:0.4rem 0.6rem;text-align:right">${fmtNum(r.tonnes)}t</td>
+        <td style="padding:0.4rem 0.6rem;text-align:right">${r.mean_grade.toFixed(3)}</td>
+        <td style="padding:0.4rem 0.6rem;text-align:right">${fmtNum(Math.round(r.contained_metal))}</td>
+        <td style="padding:0.4rem 0.6rem;text-align:right">$${fmtNum(Math.round(r.in_situ_value))}</td>
+      </tr>`;
+    });
+    tbl += '</tbody></table>';
+    document.getElementById('reserve-class-table').innerHTML = tbl;
+
+    // Grade-tonnage curve
+    const gt = d.grade_tonnage_curve;
+    Plotly.newPlot('chart-gt-curve', [
+      { x: gt.map(r => r.cutoff), y: gt.map(r => r.tonnes/1e6), type: 'scatter', mode: 'lines',
+        line: { color: '#22d3ee', width: 2.5 }, name: 'Tonnes (Mt)' },
+      { x: gt.map(r => r.cutoff), y: gt.map(r => r.grade), type: 'scatter', mode: 'lines',
+        line: { color: '#f59e0b', width: 2.5, dash: 'dot' }, name: 'Mean Grade', yaxis: 'y2' },
+    ], { ...plotlyDarkLayout,
+      title: { text: 'Grade-Tonnage Curve', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Cutoff Grade' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Tonnes (Mt)', titlefont: { color: '#22d3ee' } },
+      yaxis2: { title: 'Mean Grade', titlefont: { color: '#f59e0b' }, overlaying: 'y', side: 'right',
+        gridcolor: 'transparent' },
+      height: 380, legend: { x: 0.6, y: 0.9 },
+    }, plotlyConfig);
+
+    // Cutoff sensitivity
+    const st = d.sensitivity_table;
+    Plotly.newPlot('chart-cog-sensitivity', [{
+      x: st.map(r => r.cutoff_grade), y: st.map(r => r.in_situ_value/1e6),
+      type: 'bar', marker: { color: '#6366f1' }, name: 'In-Situ Value (M$)',
+    }], { ...plotlyDarkLayout,
+      title: { text: 'Cutoff Grade Sensitivity — Value', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Cutoff Grade' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'In-Situ Value (M$)' },
+      height: 380,
+    }, plotlyConfig);
+
+    // Classification bar chart
+    const clsData = cls.filter(r => r.classification !== 'TOTAL');
+    Plotly.newPlot('chart-res-class-bar', [
+      { x: clsData.map(r => r.classification), y: clsData.map(r => r.tonnes/1e6),
+        type: 'bar', name: 'Tonnes (Mt)',
+        marker: { color: clsData.map(r => clsColors[r.classification]) } },
+    ], { ...plotlyDarkLayout,
+      title: { text: 'Resource Classification (JORC/NI 43-101)', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Classification' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Tonnes (Mt)' },
+      height: 380,
+    }, plotlyConfig);
+
+  } catch(e) {
+    document.getElementById('reserve-status').textContent = 'Error: ' + e.message;
+    document.getElementById('reserve-status').className = 'status-msg error';
+  }
+  hideTabLoading('tab-reserve');
+}
+
+// ===== STOCHASTIC OPTIMIZATION =====
+async function runStochasticOpt() {
+  showTabLoading('tab-stochastic', 'Running stochastic optimization (SGS grade simulations)…');
+  try {
+    const d = await apiCall('/api/stochastic-optimize', {
+      n_simulations: +document.getElementById('p_sgs_k').value,
+      p_min: +document.getElementById('p_pmin').value,
+      step: +document.getElementById('p_step').value,
+    });
+
+    document.getElementById('stoch-status').textContent =
+      `✅ ${d.n_simulations} simulations · ${d.n_viable_candidates} viable candidates · ${d.n_selected} stopes selected`;
+    document.getElementById('stoch-status').className = 'status-msg success';
+
+    document.getElementById('stoch-metrics').style.display = 'flex';
+    document.getElementById('m_sgs_k').textContent = d.n_simulations;
+    document.getElementById('m_sgs_viable').textContent = d.n_viable_candidates + ' / ' + d.n_total_candidates;
+    document.getElementById('m_sgs_sel').textContent = d.n_selected;
+    document.getElementById('m_sgs_val').textContent = '$' + fmtNum(Math.round(d.total_value));
+
+    // 3D confidence scatter
+    const cd = d.confidence_data;
+    const viable = cd.filter(p => p.viable);
+    const notViable = cd.filter(p => !p.viable);
+    Plotly.newPlot('chart-stoch-3d', [
+      { x: notViable.map(p => p.x), y: notViable.map(p => p.y), z: notViable.map(p => p.z),
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 4, color: '#475569', opacity: 0.3 },
+        name: `P < ${d.p_min}`,
+      },
+      { x: viable.map(p => p.x), y: viable.map(p => p.y), z: viable.map(p => p.z),
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 5, color: viable.map(p => p.prob_positive), colorscale: 'YlOrRd',
+          showscale: true, opacity: 0.9, colorbar: { title: 'P(V>0)', thickness: 14 } },
+        text: viable.map(p => `P=${p.prob_positive.toFixed(2)} μ=$${fmtNum(Math.round(p.mean_value))}`),
+        hoverinfo: 'text', name: `P ≥ ${d.p_min}`,
+      },
+    ], { ...plotlyDarkLayout, scene: { ...plotly3dScene },
+      title: { text: 'Stochastic Stope Confidence — P(Value > 0)', font: { size: 13 } }, height: 420,
+    }, plotlyConfig);
+
+    // P(V>0) histogram
+    const ph = d.prob_histogram;
+    Plotly.newPlot('chart-stoch-hist', [{
+      x: ph.bins.slice(0,-1).map((b,i) => (b+ph.bins[i+1])/2),
+      y: ph.counts, type: 'bar', marker: { color: '#f59e0b' }, name: 'P(V>0)',
+    }, {
+      x: [d.p_min, d.p_min], y: [0, Math.max(...ph.counts)],
+      type: 'scatter', mode: 'lines', line: { color: '#f43f5e', dash: 'dash', width: 2 },
+      name: `p_min = ${d.p_min}`,
+    }], { ...plotlyDarkLayout,
+      title: { text: 'Distribution of P(Stope Value > 0)', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'P(Value > 0)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Stope Count' },
+      height: 420,
+    }, plotlyConfig);
+
+  } catch(e) {
+    document.getElementById('stoch-status').textContent = 'Error: ' + e.message;
+    document.getElementById('stoch-status').className = 'status-msg error';
+  }
+  hideTabLoading('tab-stochastic');
+}
+
+// ===== MULTI-OBJECTIVE OPTIMIZATION =====
+async function runMultiObjective() {
+  showTabLoading('tab-multiobjective', 'Running multi-objective ε-constraint optimization…');
+  try {
+    const d = await apiCall('/api/multi-objective', {
+      alpha1: +document.getElementById('p_a1').value,
+      alpha2: +document.getElementById('p_a2').value,
+      alpha3: +document.getElementById('p_a3').value,
+      step: +document.getElementById('p_step').value,
+    });
+
+    document.getElementById('mo-status').textContent =
+      `✅ ${d.n_pareto_points} Pareto points computed`;
+    document.getElementById('mo-status').className = 'status-msg success';
+
+    document.getElementById('mo-metrics').style.display = 'flex';
+    document.getElementById('m_mo_pts').textContent = d.n_pareto_points;
+    document.getElementById('m_mo_base_npv').textContent = '$' + fmtNum(Math.round(d.base_npv));
+    if (d.recommended) {
+      document.getElementById('m_mo_rec_npv').textContent = '$' + fmtNum(Math.round(d.recommended.npv));
+      document.getElementById('m_mo_rec_risk').textContent = (d.recommended.geo_risk * 100).toFixed(1) + '%';
+    }
+
+    const pp = d.pareto_points;
+    // 2D Pareto: NPV vs Risk
+    Plotly.newPlot('chart-pareto-2d', [
+      { x: pp.map(p => p.geo_risk), y: pp.map(p => p.npv/1e6), mode: 'markers+lines',
+        type: 'scatter',
+        marker: { size: 8, color: pp.map(p => p.n_stopes), colorscale: 'Viridis',
+          showscale: true, colorbar: { title: 'Stopes', thickness: 14 } },
+        line: { color: '#22d3ee', width: 1.5 },
+        text: pp.map(p => `ε=${p.eps_risk} · N=${p.n_stopes} stopes`), hoverinfo: 'text',
+        name: 'Pareto Frontier',
+      },
+      d.recommended ? {
+        x: [d.recommended.geo_risk], y: [d.recommended.npv/1e6],
+        mode: 'markers', type: 'scatter',
+        marker: { size: 14, color: '#f43f5e', symbol: 'star' },
+        name: 'Recommended', showlegend: true,
+      } : {},
+    ], { ...plotlyDarkLayout,
+      title: { text: 'Pareto Frontier: NPV vs Geotechnical Risk', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Geotechnical Risk Index' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'NPV (M$)' },
+      height: 420,
+    }, plotlyConfig);
+
+    // 3D Pareto: NPV, Risk, Dev Cost
+    const p3 = d.pareto_3d;
+    Plotly.newPlot('chart-pareto-3d', [{
+      x: p3.geo_risk, y: p3.dev_cost.map(c => c/1e6), z: p3.npv.map(n => n/1e6),
+      mode: 'markers', type: 'scatter3d',
+      marker: { size: 6, color: p3.npv.map(n => n/1e6), colorscale: 'Viridis',
+        showscale: true, colorbar: { title: 'NPV (M$)', thickness: 14 } },
+      text: p3.eps_risk.map((e,i) => `ε=${e} · N=${p3.n_stopes[i]}`), hoverinfo: 'text',
+    }], { ...plotlyDarkLayout,
+      scene: {
+        xaxis: { title: 'Geo Risk', ...plotly3dScene.xaxis },
+        yaxis: { title: 'Dev Cost (M$)', ...plotly3dScene.yaxis },
+        zaxis: { title: 'NPV (M$)', ...plotly3dScene.zaxis },
+        aspectmode: 'cube',
+      },
+      title: { text: 'Pareto Frontier: NPV – Risk – Cost Space', font: { size: 13 } },
+      height: 420,
+    }, plotlyConfig);
+
+  } catch(e) {
+    document.getElementById('mo-status').textContent = 'Error: ' + e.message;
+    document.getElementById('mo-status').className = 'status-msg error';
+  }
+  hideTabLoading('tab-multiobjective');
+}
+
+// ===== IMPLICIT GEOLOGICAL MODELING =====
+async function runImplicitGeology() {
+  showTabLoading('tab-implicit', 'Building 3D implicit geological model (RBF)…');
+  try {
+    const threshVal = document.getElementById('p_ore_thresh').value;
+    const params = {};
+    if (threshVal) params.ore_threshold = +threshVal;
+    const d = await apiCall('/api/implicit-geology', params);
+
+    document.getElementById('impl-status').textContent =
+      `✅ Implicit model: ${d.ore_fraction*100}% ore fraction · threshold = ${d.ore_threshold}`;
+    document.getElementById('impl-status').className = 'status-msg success';
+
+    document.getElementById('impl-metrics').style.display = 'flex';
+    document.getElementById('m_impl_thresh').textContent = d.ore_threshold;
+    document.getElementById('m_impl_ore_frac').textContent = (d.ore_fraction*100).toFixed(1) + '%';
+    document.getElementById('m_impl_ore_n').textContent = d.n_ore_blocks.toLocaleString();
+    document.getElementById('m_impl_faults').textContent =
+      d.domain_points.fault_zones.x.length + ' pts';
+
+    const dp = d.domain_points;
+    const traces = [];
+    if (dp.ore_zone.x.length) {
+      traces.push({
+        x: dp.ore_zone.x, y: dp.ore_zone.y, z: dp.ore_zone.z,
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 3, color: '#f59e0b', opacity: 0.4 },
+        name: 'Ore Zone', hoverinfo: 'name',
+      });
+    }
+    if (dp.waste_zone.x.length) {
+      traces.push({
+        x: dp.waste_zone.x, y: dp.waste_zone.y, z: dp.waste_zone.z,
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 2, color: '#475569', opacity: 0.15 },
+        name: 'Waste', hoverinfo: 'name',
+      });
+    }
+    if (dp.iso_surface.x.length) {
+      traces.push({
+        x: dp.iso_surface.x, y: dp.iso_surface.y, z: dp.iso_surface.z,
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 5, color: '#22d3ee', opacity: 0.9, symbol: 'diamond' },
+        name: 'Ore Boundary (SDF=0)',
+      });
+    }
+    if (dp.fault_zones.x.length) {
+      traces.push({
+        x: dp.fault_zones.x, y: dp.fault_zones.y, z: dp.fault_zones.z,
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 4, color: '#f43f5e', opacity: 0.8, symbol: 'x' },
+        name: 'Fault Zones',
+      });
+    }
+    Plotly.newPlot('chart-implicit-3d', traces, {
+      ...plotlyDarkLayout,
+      scene: { ...plotly3dScene },
+      title: { text: '3D Implicit Geological Model — RBF Signed Distance Field', font: { size: 14 } },
+      height: 560,
+      legend: { x: 0.02, y: 0.98 },
+    }, plotlyConfig);
+
+  } catch(e) {
+    document.getElementById('impl-status').textContent = 'Error: ' + e.message;
+    document.getElementById('impl-status').className = 'status-msg error';
+  }
+  hideTabLoading('tab-implicit');
+}
+
+// ===== VENTILATION NETWORK =====
+async function runVentilation() {
+  showTabLoading('tab-ventilation', 'Designing ventilation circuit (Hardy Cross)…');
+  try {
+    const d = await apiCall('/api/ventilation', {
+      diesel_kw: +document.getElementById('p_diesel_kw').value,
+      ambient_temp: +document.getElementById('p_ambient_temp').value,
+    });
+
+    const comply = d.regulatory_check.compliant;
+    document.getElementById('vent-status').textContent =
+      `✅ Ventilation designed · ${d.total_airflow_required_m3s} m³/s · Fan: ${d.main_fan_kw} kW · WBT: ${d.wbt_at_depth}°C`;
+    document.getElementById('vent-status').className = 'status-msg ' + (comply ? 'success' : 'warn');
+
+    document.getElementById('vent-metrics').style.display = 'flex';
+    document.getElementById('m_vent_q').textContent = d.total_airflow_required_m3s + ' m³/s';
+    document.getElementById('m_vent_fan').textContent = d.main_fan_kw + ' kW';
+    document.getElementById('m_vent_wbt').textContent = d.wbt_at_depth + '°C';
+    const compEl = document.getElementById('m_vent_comply');
+    compEl.textContent = comply ? '✅ Compliant' : '⚠ Review';
+    compEl.style.color = comply ? '#10b981' : '#f59e0b';
+
+    // Circuit airflow bar chart
+    const circ = d.circuit;
+    Plotly.newPlot('chart-vent-circuit', [{
+      x: circ.map(b => `${b.type} #${b.id}`),
+      y: circ.map(b => b.flow_m3s),
+      type: 'bar', marker: { color: circ.map(b => b.dp_pa > 500 ? '#f43f5e' : '#22d3ee') },
+      text: circ.map(b => `${b.flow_m3s} m³/s · ${b.dp_pa} Pa`), hoverinfo: 'text',
+      name: 'Airflow (m³/s)',
+    }], { ...plotlyDarkLayout,
+      title: { text: 'Ventilation Circuit — Airflow per Branch', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Branch' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Flow (m³/s)' },
+      height: 420,
+    }, plotlyConfig);
+
+    // Level-by-level compliance
+    const lvl = d.level_summary;
+    Plotly.newPlot('chart-vent-levels', [
+      { x: lvl.map(l => l.elevation), y: lvl.map(l => l.required_flow_m3s),
+        type: 'bar', marker: { color: lvl.map(l => l.compliant ? '#10b981' : '#f43f5e') },
+        name: 'Required Flow (m³/s)',
+        text: lvl.map(l => `${l.n_faces} faces · ${l.compliant ? '✅' : '⚠'}`), hoverinfo: 'x+y+text',
+      },
+    ], { ...plotlyDarkLayout,
+      title: { text: 'Airflow Requirements by Level', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Elevation (m)' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Required Airflow (m³/s)' },
+      height: 420,
+    }, plotlyConfig);
+
+    // Booster fan info
+    if (d.booster_fans.length > 0) {
+      const bInfo = document.getElementById('vent-booster-info');
+      bInfo.innerHTML = `<strong>Booster Fans Required:</strong> ${d.n_booster_fans} location(s) — ` +
+        d.booster_fans.map(b => `Segment ${b.segment} (${b.type}): ${b.dp_pa} Pa → ${b.recommended_kw} kW`).join(' | ');
+    }
+
+    // Regulatory summary
+    const reg = d.regulatory_check;
+    const regDiv = document.createElement('div');
+    regDiv.style.cssText = 'margin-top:0.75rem;padding:0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:0.82rem';
+    regDiv.innerHTML = `<strong>Regulatory Compliance:</strong><br>
+      Min airflow: ≥${reg.min_airflow_per_kw} m³/s/kW · Actual: ${reg.actual_airflow_per_kw} m³/s/kW<br>
+      Max WBT: ≤${reg.max_wbt_c}°C · Actual: ${reg.actual_wbt_c}°C<br>
+      Status: <span style="color:${reg.compliant?'#10b981':'#f59e0b'};font-weight:600">${reg.compliant?'✅ COMPLIANT':'⚠ NEEDS REVIEW'}</span>`;
+    document.getElementById('vent-booster-info').appendChild(regDiv);
+
+  } catch(e) {
+    document.getElementById('vent-status').textContent = 'Error: ' + e.message;
+    document.getElementById('vent-status').className = 'status-msg error';
+  }
+  hideTabLoading('tab-ventilation');
+}
+
+// ===== BACKFILL OPTIMIZATION =====
+async function runBackfill() {
+  showTabLoading('tab-backfill', 'Optimizing backfill schedule (network flow)…');
+  try {
+    const d = await apiCall('/api/backfill', {
+      fill_type: document.getElementById('p_fill_type').value,
+      batch_capacity: +document.getElementById('p_batch_cap').value,
+    });
+
+    document.getElementById('fill-status').textContent =
+      `✅ ${d.n_primary} primary · ${d.n_secondary} secondary · fill vol: ${fmtNum(Math.round(d.total_fill_volume_m3))} m³ · net: $${fmtNum(Math.round(d.net_value))}`;
+    document.getElementById('fill-status').className = 'status-msg success';
+
+    document.getElementById('fill-metrics').style.display = 'flex';
+    document.getElementById('m_fill_primary').textContent = d.n_primary;
+    document.getElementById('m_fill_secondary').textContent = d.n_secondary;
+    document.getElementById('m_fill_vol').textContent = fmtNum(Math.round(d.total_fill_volume_m3));
+    document.getElementById('m_fill_cost').textContent = '$' + fmtNum(Math.round(d.total_fill_cost));
+
+    // Per-period schedule bar chart
+    const ps = d.period_summary;
+    Plotly.newPlot('chart-fill-schedule', [
+      { x: ps.map(p => `P${p.period}`), y: ps.map(p => p.mine_value/1e6),
+        type: 'bar', name: 'Mine Value (M$)', marker: { color: '#10b981' } },
+      { x: ps.map(p => `P${p.period}`), y: ps.map(p => -p.fill_cost/1e6),
+        type: 'bar', name: 'Fill Cost (M$)', marker: { color: '#f43f5e' } },
+      { x: ps.map(p => `P${p.period}`), y: ps.map(p => p.net/1e6),
+        type: 'scatter', mode: 'lines+markers', name: 'Net (M$)',
+        line: { color: '#f59e0b', width: 2 }, marker: { size: 7 }, yaxis: 'y' },
+    ], { ...plotlyDarkLayout,
+      barmode: 'relative',
+      title: { text: 'Backfill Schedule — Value vs Fill Cost per Period', font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: 'Mining Period' },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Value (M$)' },
+      height: 420,
+    }, plotlyConfig);
+
+    // Dependency network (scatter3d)
+    const gr = d.dependency_graph;
+    const primNodes = gr.nodes.filter(n => n.type === 'primary');
+    const secNodes = gr.nodes.filter(n => n.type === 'secondary');
+    const traces3d = [
+      { x: primNodes.map(n=>n.x), y: primNodes.map(n=>n.y), z: primNodes.map(n=>n.z),
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 6, color: '#f59e0b', opacity: 0.9 },
+        text: primNodes.map(n=>`Primary ${n.id} $${fmtNum(Math.round(n.value))}`), hoverinfo:'text',
+        name: 'Primary Stopes',
+      },
+      { x: secNodes.map(n=>n.x), y: secNodes.map(n=>n.y), z: secNodes.map(n=>n.z),
+        mode: 'markers', type: 'scatter3d',
+        marker: { size: 6, color: '#22d3ee', opacity: 0.9 },
+        text: secNodes.map(n=>`Secondary ${n.id} $${fmtNum(Math.round(n.value))}`), hoverinfo:'text',
+        name: 'Secondary Stopes',
+      },
+    ];
+    // Add dependency edges as line traces
+    gr.edges.slice(0, 30).forEach(e => {
+      const f = gr.nodes.find(n => n.id === e.from);
+      const t = gr.nodes.find(n => n.id === e.to);
+      if (f && t) {
+        traces3d.push({
+          x: [f.x, t.x], y: [f.y, t.y], z: [f.z, t.z],
+          mode: 'lines', type: 'scatter3d',
+          line: { color: '#475569', width: 1.5 }, showlegend: false,
+        });
+      }
+    });
+    Plotly.newPlot('chart-fill-network', traces3d, {
+      ...plotlyDarkLayout,
+      scene: { ...plotly3dScene },
+      title: { text: 'Primary/Secondary Stope Dependency Network', font: { size: 13 } },
+      height: 420,
+    }, plotlyConfig);
+
+    // Economics waterfall: total value → fill cost → net
+    Plotly.newPlot('chart-fill-econ', [{
+      type: 'waterfall', orientation: 'v',
+      x: ['Total Stope Value', 'Fill Cost', 'Net Value'],
+      y: [d.total_stope_value/1e6, -d.total_fill_cost/1e6, d.net_value/1e6],
+      measure: ['absolute', 'relative', 'total'],
+      connector: { line: { color: '#475569' } },
+      increasing: { marker: { color: '#10b981' } },
+      decreasing: { marker: { color: '#f43f5e' } },
+      totals: { marker: { color: '#22d3ee' } },
+      text: [`$${fmtNum(Math.round(d.total_stope_value))}`,
+             `-$${fmtNum(Math.round(d.total_fill_cost))}`,
+             `$${fmtNum(Math.round(d.net_value))}`],
+      textposition: 'outside',
+    }], { ...plotlyDarkLayout,
+      title: { text: 'Backfill Economics Waterfall', font: { size: 13 } },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Value (M$)' },
+      height: 360,
+    }, plotlyConfig);
+
+  } catch(e) {
+    document.getElementById('fill-status').textContent = 'Error: ' + e.message;
+    document.getElementById('fill-status').className = 'status-msg error';
+  }
+  hideTabLoading('tab-backfill');
+}
+
+function fmtNum(n) {
+  if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return n.toString();
+}

@@ -206,9 +206,12 @@
 
       <div class="param-group">
         <div class="param-group-title">📦 Block Model</div>
-        <div class="param-row"><label>Grid X</label><input type="number" id="p_nx" value="30" min="10" max="60" step="5"></div>
-        <div class="param-row"><label>Grid Y</label><input type="number" id="p_ny" value="25" min="10" max="60" step="5"></div>
-        <div class="param-row"><label>Grid Z</label><input type="number" id="p_nz" value="15" min="5" max="30" step="5"></div>
+        <div style="font-size:0.72rem;color:#f59e0b;margin-bottom:0.5rem;padding:0.3rem 0.5rem;background:rgba(245,158,11,0.1);border-radius:4px;border-left:3px solid #f59e0b">
+          ⚡ Keep grid ≤ 20×15×10 on the free cloud host (30s timeout). Run locally for full size.
+        </div>
+        <div class="param-row"><label>Grid X</label><input type="number" id="p_nx" value="20" min="10" max="60" step="5"></div>
+        <div class="param-row"><label>Grid Y</label><input type="number" id="p_ny" value="15" min="10" max="60" step="5"></div>
+        <div class="param-row"><label>Grid Z</label><input type="number" id="p_nz" value="10" min="5" max="30" step="5"></div>
         <div class="param-row"><label>Block Size (m)</label><input type="number" id="p_bs" value="5" min="3" max="10"></div>
         <div class="param-row"><label>Seed</label><input type="number" id="p_seed" value="42" min="1" max="999"></div>
       </div>
@@ -234,7 +237,7 @@
         <div class="param-row"><label>Max Height</label><input type="number" id="p_maxh" value="5" min="3" max="10"></div>
         <div class="param-row"><label>Min Length</label><input type="number" id="p_minl" value="2" min="1" max="6"></div>
         <div class="param-row"><label>Max Length</label><input type="number" id="p_maxl" value="4" min="2" max="8"></div>
-        <div class="param-row"><label>Step Size</label><input type="number" id="p_step" value="2" min="1" max="4"></div>
+        <div class="param-row"><label>Step Size</label><input type="number" id="p_step" value="3" min="1" max="4"></div>
       </div>
 
       <button class="btn btn-primary" style="width:100%;margin-top:0.5rem" onclick="generateBlockModel()">
@@ -256,6 +259,14 @@
         <button class="tab" data-tab="tab-geotech">🪨 Geotechnical</button>
         <button class="tab" data-tab="tab-kriging">📐 Kriging</button>
         <button class="tab" data-tab="tab-scenarios">🔀 Scenarios</button>
+        <button class="tab" data-tab="tab-adv-kriging">🔬 Adv. Kriging</button>
+        <button class="tab" data-tab="tab-bolani">🔩 Bolani Data</button>
+        <button class="tab" data-tab="tab-reserve">📋 Reserve Report</button>
+        <button class="tab" data-tab="tab-stochastic">🎯 Stochastic Opt.</button>
+        <button class="tab" data-tab="tab-multiobjective">⚖ Multi-Objective</button>
+        <button class="tab" data-tab="tab-implicit">🌐 Implicit Geology</button>
+        <button class="tab" data-tab="tab-ventilation">💨 Ventilation</button>
+        <button class="tab" data-tab="tab-backfill">🧱 Backfill</button>
       </div>
 
       <!-- TAB 1: Block Model -->
@@ -352,7 +363,7 @@
       <div class="tab-content" id="tab-mc">
         <div id="mc-status" class="status-msg info">Run stope optimization first.</div>
         <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:end">
-          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Simulations</label><input type="number" id="p_nsims" value="1000" min="100" max="10000" step="100" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:90px;font-size:0.82rem"></div>
+          <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Simulations</label><input type="number" id="p_nsims" value="300" min="100" max="10000" step="100" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:90px;font-size:0.82rem"></div>
           <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Price Uncertainty %</label><input type="number" id="p_price_std" value="15" min="5" max="30" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:70px;font-size:0.82rem"></div>
           <div><label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem">Grade Uncertainty %</label><input type="number" id="p_grade_std" value="10" min="5" max="25" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0.3rem 0.5rem;width:70px;font-size:0.82rem"></div>
           <button class="btn btn-primary btn-sm" onclick="runMonteCarlo()">🎲 Run Simulation</button>
@@ -516,6 +527,239 @@
             <div class="chart-container"><div id="chart-scen-stopes" style="height:380px"></div></div>
           </div>
         </div>
+      </div>
+
+      <!-- TAB 12: Advanced Kriging Variants -->
+      <div class="tab-content" id="tab-adv-kriging">
+        <div id="advk-status" class="status-msg info">Generate block model first. Choose a kriging variant and run to compare estimation methods.</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <label style="font-size:0.82rem;color:var(--text-muted)">Kriging Type:
+            <select id="p_krig_type" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.5rem;margin-left:0.3rem">
+              <option value="sk">Simple Kriging (SK)</option>
+              <option value="ik">Indicator Kriging (IK)</option>
+              <option value="sgs">Sequential Gaussian Simulation (SGS)</option>
+            </select>
+          </label>
+          <label style="font-size:0.82rem;color:var(--text-muted)">Variogram:
+            <select id="p_advk_vario" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.5rem;margin-left:0.3rem">
+              <option value="spherical">Spherical</option>
+              <option value="exponential">Exponential</option>
+              <option value="gaussian">Gaussian</option>
+            </select>
+          </label>
+          <label id="sgs-k-label" style="font-size:0.82rem;color:var(--text-muted)">SGS Simulations:
+            <input type="number" id="p_sgs_nsim" value="10" min="5" max="30" style="width:60px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <button class="btn btn-primary" onclick="runAdvKriging()">🔬 Run</button>
+        </div>
+        <div id="advk-metrics" class="metrics-row" style="display:none">
+          <div class="metric-card"><div class="metric-label">Method</div><div class="metric-value blue" id="m_advk_type">—</div></div>
+          <div class="metric-card"><div class="metric-label">CV R²</div><div class="metric-value green" id="m_advk_r2">—</div></div>
+          <div class="metric-card"><div class="metric-label">CV RMSE</div><div class="metric-value amber" id="m_advk_rmse">—</div></div>
+          <div class="metric-card"><div class="metric-label">Info</div><div class="metric-value purple" id="m_advk_info">—</div></div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-advk-3d" style="height:460px"></div></div>
+          <div class="chart-container"><div id="chart-advk-secondary" style="height:460px"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 13: Bolani Data Explorer -->
+      <div class="tab-content" id="tab-bolani">
+        <div id="bolani-status" class="status-msg info">Load the Bolani iron ore drillhole dataset to explore composites, block model, and grade distributions.</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <button class="btn btn-primary" onclick="loadBolani()">📂 Load Bolani Dataset</button>
+          <button class="btn btn-outline btn-sm" onclick="buildBolaniBlockModel()" id="btn-bolani-bm" disabled>🧊 Build Block Model</button>
+          <label style="font-size:0.82rem;color:var(--text-muted)">Block Size (m):
+            <input type="number" id="p_bolani_bs" value="10" min="5" max="20" step="5" style="width:60px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.4rem">
+          </label>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+            <label style="font-size:0.82rem;color:var(--text-muted)">Grade Filter (Fe%):
+              <input type="number" id="p_fe_min" value="40" min="0" max="70" step="5" style="width:55px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+              —
+              <input type="number" id="p_fe_max" value="70" min="30" max="75" step="5" style="width:55px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+            </label>
+            <button class="btn btn-outline btn-sm" onclick="filterBolaniBlockModel()">🔍 Apply Filter</button>
+          </div>
+        </div>
+        <div id="bolani-metrics" class="metrics-row" style="display:none">
+          <div class="metric-card"><div class="metric-label">Drillholes</div><div class="metric-value blue" id="m_bh_count">—</div></div>
+          <div class="metric-card"><div class="metric-label">Composites</div><div class="metric-value green" id="m_comp_count">—</div></div>
+          <div class="metric-card"><div class="metric-label">Mean Fe%</div><div class="metric-value amber" id="m_fe_mean">—</div></div>
+          <div class="metric-card"><div class="metric-label">Max Fe%</div><div class="metric-value purple" id="m_fe_max_val">—</div></div>
+        </div>
+        <!-- 3D drillhole viewer -->
+        <div class="chart-container" style="margin-bottom:1rem"><div id="chart-bolani-3d" style="height:480px"></div></div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-fe-hist" style="height:360px"></div></div>
+          <div class="chart-container"><div id="chart-fe-ln" style="height:360px"></div></div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-fe-sio2" style="height:360px"></div></div>
+          <div class="chart-container"><div id="chart-fe-al2o3" style="height:360px"></div></div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-fe-depth" style="height:360px"></div></div>
+          <div class="chart-container"><div id="chart-bolani-variogram" style="height:360px"></div></div>
+        </div>
+        <!-- Transparent block model (grade filtered) -->
+        <div id="bolani-bm-section" style="display:none">
+          <h4 style="color:var(--text-muted);font-size:0.9rem;margin-bottom:0.5rem">Transparent Block Model — Fe Grade (filtered by range)</h4>
+          <div class="chart-container"><div id="chart-bolani-bm-3d" style="height:520px"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 13: Reserve Reporting -->
+      <div class="tab-content" id="tab-reserve">
+        <div id="reserve-status" class="status-msg info">Generate block model and run optimization first, then generate JORC/NI 43-101 reserve report.</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <button class="btn btn-primary" onclick="runReserveReport()">📋 Generate Reserve Report</button>
+          <label style="font-size:0.82rem;color:var(--text-muted)">Commodity:
+            <select id="p_commodity" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.5rem;margin-left:0.3rem">
+              <option value="Au">Gold (Au)</option>
+              <option value="Fe">Iron (Fe)</option>
+            </select>
+          </label>
+        </div>
+        <div id="reserve-metrics" class="metrics-row" style="display:none">
+          <div class="metric-card"><div class="metric-label">Standard</div><div class="metric-value blue" id="m_res_std">—</div></div>
+          <div class="metric-card"><div class="metric-label">Base Cutoff</div><div class="metric-value amber" id="m_res_cog">—</div></div>
+          <div class="metric-card"><div class="metric-label">Total Tonnes</div><div class="metric-value green" id="m_res_tonnes">—</div></div>
+          <div class="metric-card"><div class="metric-label">Contained Metal</div><div class="metric-value purple" id="m_res_metal">—</div></div>
+        </div>
+        <!-- Classification table -->
+        <div id="reserve-class-table" style="margin-bottom:1.5rem;overflow-x:auto"></div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-gt-curve" style="height:380px"></div></div>
+          <div class="chart-container"><div id="chart-cog-sensitivity" style="height:380px"></div></div>
+        </div>
+        <div class="chart-container"><div id="chart-res-class-bar" style="height:380px"></div></div>
+      </div>
+
+      <!-- TAB 14: Stochastic Optimization -->
+      <div class="tab-content" id="tab-stochastic">
+        <div id="stoch-status" class="status-msg info">Generate block model first. Stochastic optimization uses SGS grade simulations to select stopes with high probability of economic viability.</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <label style="font-size:0.82rem;color:var(--text-muted)">Simulations (K):
+            <input type="number" id="p_sgs_k" value="15" min="5" max="50" style="width:60px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <label style="font-size:0.82rem;color:var(--text-muted)">P<sub>min</sub> threshold:
+            <input type="number" id="p_pmin" value="0.70" min="0.5" max="0.95" step="0.05" style="width:70px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <button class="btn btn-primary" onclick="runStochasticOpt()">🎯 Run Stochastic Optimization</button>
+        </div>
+        <div id="stoch-metrics" class="metrics-row" style="display:none">
+          <div class="metric-card"><div class="metric-label">Simulations</div><div class="metric-value blue" id="m_sgs_k">—</div></div>
+          <div class="metric-card"><div class="metric-label">Viable Candidates</div><div class="metric-value green" id="m_sgs_viable">—</div></div>
+          <div class="metric-card"><div class="metric-label">Selected Stopes</div><div class="metric-value amber" id="m_sgs_sel">—</div></div>
+          <div class="metric-card"><div class="metric-label">Total Value</div><div class="metric-value purple" id="m_sgs_val">—</div></div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-stoch-3d" style="height:420px"></div></div>
+          <div class="chart-container"><div id="chart-stoch-hist" style="height:420px"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 15: Multi-Objective Optimization -->
+      <div class="tab-content" id="tab-multiobjective">
+        <div id="mo-status" class="status-msg info">Generate block model first. Multi-objective optimization explores the NPV–Risk–Cost Pareto frontier using the ε-constraint method.</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <label style="font-size:0.82rem;color:var(--text-muted)">α₁ (NPV weight):
+            <input type="number" id="p_a1" value="1.0" min="0.1" max="2" step="0.1" style="width:60px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <label style="font-size:0.82rem;color:var(--text-muted)">α₂ (Risk weight):
+            <input type="number" id="p_a2" value="0.5" min="0.1" max="2" step="0.1" style="width:60px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <label style="font-size:0.82rem;color:var(--text-muted)">α₃ (Cost weight):
+            <input type="number" id="p_a3" value="0.3" min="0.1" max="2" step="0.1" style="width:60px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <button class="btn btn-primary" onclick="runMultiObjective()">⚖ Run Multi-Objective Opt.</button>
+        </div>
+        <div id="mo-metrics" class="metrics-row" style="display:none">
+          <div class="metric-card"><div class="metric-label">Pareto Points</div><div class="metric-value blue" id="m_mo_pts">—</div></div>
+          <div class="metric-card"><div class="metric-label">Base NPV</div><div class="metric-value green" id="m_mo_base_npv">—</div></div>
+          <div class="metric-card"><div class="metric-label">Rec. NPV</div><div class="metric-value amber" id="m_mo_rec_npv">—</div></div>
+          <div class="metric-card"><div class="metric-label">Rec. Risk</div><div class="metric-value purple" id="m_mo_rec_risk">—</div></div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-pareto-2d" style="height:420px"></div></div>
+          <div class="chart-container"><div id="chart-pareto-3d" style="height:420px"></div></div>
+        </div>
+      </div>
+
+      <!-- TAB 16: Implicit Geological Modeling -->
+      <div class="tab-content" id="tab-implicit">
+        <div id="impl-status" class="status-msg info">Generate block model or load Bolani data first. RBF implicit modeling delineates ore zones, faults, and geological contacts.</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <label style="font-size:0.82rem;color:var(--text-muted)">Ore Threshold (auto if blank):
+            <input type="number" id="p_ore_thresh" placeholder="auto" style="width:80px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <button class="btn btn-primary" onclick="runImplicitGeology()">🌐 Build Implicit Model</button>
+        </div>
+        <div id="impl-metrics" class="metrics-row" style="display:none">
+          <div class="metric-card"><div class="metric-label">Ore Threshold</div><div class="metric-value amber" id="m_impl_thresh">—</div></div>
+          <div class="metric-card"><div class="metric-label">Ore Fraction</div><div class="metric-value green" id="m_impl_ore_frac">—</div></div>
+          <div class="metric-card"><div class="metric-label">Ore Blocks</div><div class="metric-value blue" id="m_impl_ore_n">—</div></div>
+          <div class="metric-card"><div class="metric-label">Fault Zones</div><div class="metric-value purple" id="m_impl_faults">—</div></div>
+        </div>
+        <!-- Full 3D geological model viewer -->
+        <div class="chart-container"><div id="chart-implicit-3d" style="height:560px"></div></div>
+        <p style="font-size:0.78rem;color:var(--text-muted);text-align:center;margin-top:0.5rem">
+          Ore zone (orange) · Waste zone (grey) · Iso-surface at SDF=0 (blue) · Fault zones (red) | Use mouse to rotate, zoom and inspect the 3D geological model.
+        </p>
+      </div>
+
+      <!-- TAB 17: Ventilation Network -->
+      <div class="tab-content" id="tab-ventilation">
+        <div id="vent-status" class="status-msg info">Run stope optimization and mine layout first. Ventilation design uses the development network geometry.</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <label style="font-size:0.82rem;color:var(--text-muted)">Diesel Power (kW):
+            <input type="number" id="p_diesel_kw" value="500" min="100" max="2000" step="100" style="width:70px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <label style="font-size:0.82rem;color:var(--text-muted)">Ambient Temp (°C):
+            <input type="number" id="p_ambient_temp" value="20" min="10" max="40" style="width:60px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <button class="btn btn-primary" onclick="runVentilation()">💨 Design Ventilation</button>
+        </div>
+        <div id="vent-metrics" class="metrics-row" style="display:none">
+          <div class="metric-card"><div class="metric-label">Total Airflow (m³/s)</div><div class="metric-value blue" id="m_vent_q">—</div></div>
+          <div class="metric-card"><div class="metric-label">Main Fan (kW)</div><div class="metric-value green" id="m_vent_fan">—</div></div>
+          <div class="metric-card"><div class="metric-label">WBT at Depth (°C)</div><div class="metric-value amber" id="m_vent_wbt">—</div></div>
+          <div class="metric-card"><div class="metric-label">Regulatory</div><div class="metric-value" id="m_vent_comply" style="color:green">—</div></div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-vent-circuit" style="height:420px"></div></div>
+          <div class="chart-container"><div id="chart-vent-levels" style="height:420px"></div></div>
+        </div>
+        <div id="vent-booster-info" style="margin-top:1rem;font-size:0.85rem;color:var(--text-muted)"></div>
+      </div>
+
+      <!-- TAB 18: Backfill Optimization -->
+      <div class="tab-content" id="tab-backfill">
+        <div id="fill-status" class="status-msg info">Run stope optimization first. Backfill optimizer schedules CRF/paste fill for primary stopes before mining adjacent secondaries.</div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <label style="font-size:0.82rem;color:var(--text-muted)">Fill Type:
+            <select id="p_fill_type" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.5rem;margin-left:0.3rem">
+              <option value="paste">Paste Fill ($120/m³)</option>
+              <option value="crf">Cemented Rockfill ($85/m³)</option>
+            </select>
+          </label>
+          <label style="font-size:0.82rem;color:var(--text-muted)">Batch Capacity (m³/day):
+            <input type="number" id="p_batch_cap" value="500" min="100" max="2000" step="100" style="width:70px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.3rem">
+          </label>
+          <button class="btn btn-primary" onclick="runBackfill()">🧱 Optimize Backfill</button>
+        </div>
+        <div id="fill-metrics" class="metrics-row" style="display:none">
+          <div class="metric-card"><div class="metric-label">Primary Stopes</div><div class="metric-value blue" id="m_fill_primary">—</div></div>
+          <div class="metric-card"><div class="metric-label">Secondary Stopes</div><div class="metric-value green" id="m_fill_secondary">—</div></div>
+          <div class="metric-card"><div class="metric-label">Fill Volume (m³)</div><div class="metric-value amber" id="m_fill_vol">—</div></div>
+          <div class="metric-card"><div class="metric-label">Fill Cost</div><div class="metric-value purple" id="m_fill_cost">—</div></div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-container"><div id="chart-fill-schedule" style="height:420px"></div></div>
+          <div class="chart-container"><div id="chart-fill-network" style="height:420px"></div></div>
+        </div>
+        <div class="chart-container"><div id="chart-fill-econ" style="height:360px"></div></div>
       </div>
 
     </main>

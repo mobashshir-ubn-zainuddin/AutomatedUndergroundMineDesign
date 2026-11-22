@@ -15,7 +15,14 @@ from monte_carlo import run_monte_carlo
 from grade_prediction import train_grade_model
 from production_scheduler import schedule_production
 from geotechnical import assess_stability
-from kriging import run_kriging_analysis
+from kriging import run_kriging_analysis, run_simple_kriging, run_indicator_kriging, run_sgs
+from bolani_loader import load_drillhole_data, build_bolani_block_model, get_bolani_stats
+from reserve_reporting import classify_resource, generate_reserve_table
+from stochastic_optimizer import run_stochastic_optimization
+from multi_objective import run_multi_objective_optimization
+from implicit_geology import build_implicit_model
+from ventilation import design_ventilation_network
+from backfill import optimize_backfill
 
 import numpy as np
 import pandas as pd
@@ -476,6 +483,38 @@ def api_kriging():
     return jsonify(np_safe(result))
 
 
+@app.route("/api/kriging/simple", methods=["POST"])
+def api_kriging_simple():
+    if "block_model" not in cache:
+        return jsonify({"error": "Generate block model first"}), 400
+    p = request.json
+    result = run_simple_kriging(cache["block_model"],
+                                variogram_model=p.get("variogram_model", "spherical"),
+                                test_fraction=p.get("test_fraction", 0.2))
+    return jsonify(np_safe(result))
+
+
+@app.route("/api/kriging/indicator", methods=["POST"])
+def api_kriging_indicator():
+    if "block_model" not in cache:
+        return jsonify({"error": "Generate block model first"}), 400
+    p = request.json
+    result = run_indicator_kriging(cache["block_model"],
+                                   variogram_model=p.get("variogram_model", "spherical"))
+    return jsonify(np_safe(result))
+
+
+@app.route("/api/kriging/sgs", methods=["POST"])
+def api_kriging_sgs():
+    if "block_model" not in cache:
+        return jsonify({"error": "Generate block model first"}), 400
+    p = request.json
+    result = run_sgs(cache["block_model"],
+                     n_simulations=p.get("n_simulations", 10),
+                     variogram_model=p.get("variogram_model", "spherical"))
+    return jsonify(np_safe(result))
+
+
 @app.route("/api/schedule", methods=["POST"])
 def api_schedule():
     if "opt_result" not in cache or not cache["opt_result"]["selected"]:
@@ -511,6 +550,212 @@ def api_geotechnical():
     result = assess_stability(selected)
     cache["geotech"] = result
 
+    return jsonify(np_safe(result))
+
+
+# ── Bolani Drillhole Data ──────────────────────────────────────────────────────
+
+@app.route("/api/bolani/load", methods=["POST"])
+def api_bolani_load():
+    """Load and parse Bolani drillhole data, return composites + stats."""
+    try:
+        df_comp, collar = load_drillhole_data()
+        cache["bolani_composites"] = df_comp
+        cache["bolani_collar"] = collar
+        stats = get_bolani_stats(df_comp)
+        drillholes = []
+        for _, row in collar.iterrows():
+            drillholes.append({
+                "bh_no": row["bh_no"],
+                "x": float(row.get("e", 0)), "y": float(row.get("n", 0)),
+                "z": float(row.get("z", 0)), "depth": float(row.get("depth", 0)),
+            })
+        # Return composite samples for 3D drillhole display
+        samples = df_comp[["x", "y", "z", "fe", "lithocode", "bh_no"]].dropna(subset=["fe"])
+        return jsonify(np_safe({
+            "n_drillholes": len(collar),
+            "n_composites": len(df_comp),
+            "drillholes": drillholes,
+            "composites": {
+                "x": samples["x"].tolist(), "y": samples["y"].tolist(),
+                "z": samples["z"].tolist(), "fe": samples["fe"].tolist(),
+                "litho": samples["lithocode"].tolist(),
+                "bh": samples["bh_no"].tolist(),
+            },
+            "stats": stats,
+        }))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bolani/block-model", methods=["POST"])
+def api_bolani_block_model():
+    """Build IDW block model from Bolani composites."""
+    if "bolani_composites" not in cache:
+        return jsonify({"error": "Load Bolani data first"}), 400
+    p = request.json
+    block_size = p.get("block_size", 10)
+    df_bm = build_bolani_block_model(cache["bolani_composites"], block_size=block_size)
+    if df_bm.empty:
+        return jsonify({"error": "Block model generation failed"}), 500
+    cache["bolani_block_model"] = df_bm
+
+    # Grade range filtering data
+    fe_min = float(df_bm["fe"].min())
+    fe_max = float(df_bm["fe"].max())
+    sample = df_bm.sample(min(3000, len(df_bm)), random_state=42)
+
+    return jsonify(np_safe({
+        "n_blocks": len(df_bm),
+        "fe_min": round(fe_min, 2), "fe_max": round(fe_max, 2),
+        "fe_mean": round(float(df_bm["fe"].mean()), 2),
+        "block_size": block_size,
+        "blocks": {
+            "x": sample["x"].tolist(), "y": sample["y"].tolist(),
+            "z": sample["z"].tolist(), "fe": sample["fe"].tolist(),
+            "sio2": sample["sio2"].tolist(), "al2o3": sample["al2o3"].tolist(),
+        },
+    }))
+
+
+# ── Reserve Reporting ─────────────────────────────────────────────────────────
+
+@app.route("/api/reserve-report", methods=["POST"])
+def api_reserve_report():
+    if "df_econ" not in cache:
+        return jsonify({"error": "Generate block model first"}), 400
+    p = request.json
+    commodity = p.get("commodity", "Au")
+    grade_col = "grade_au_gt"
+    cutoff_base = cache.get("cutoff", 0.5)
+    cutoff_grades = [cutoff_base * f for f in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]]
+
+    df_class = classify_resource(
+        cache["df_econ"], grade_col=grade_col,
+        block_size=cache.get("block_size", 5)
+    )
+    ep = cache.get("econ_params", {})
+    report = generate_reserve_table(
+        df_class, cutoff_grades, grade_col=grade_col, commodity=commodity,
+        price_per_unit=ep.get("gold_price", 1900),
+        recovery=ep.get("recovery", 0.92),
+        mining_cost=ep.get("mining_cost", 45),
+        processing_cost=ep.get("processing_cost", 25),
+        ga_cost=ep.get("ga_cost", 10),
+        block_size=cache.get("block_size", 5),
+    )
+    return jsonify(np_safe(report))
+
+
+# ── Stochastic Optimization ───────────────────────────────────────────────────
+
+@app.route("/api/stochastic-optimize", methods=["POST"])
+def api_stochastic_optimize():
+    if "df_econ" not in cache:
+        return jsonify({"error": "Generate block model first"}), 400
+    p = request.json
+    block_size = cache["block_size"]
+    from stope_generator import generate_candidate_stopes
+    candidates, b2s = generate_candidate_stopes(
+        cache["df_econ"], block_size=block_size,
+        min_width=p.get("min_width", 2), max_width=p.get("max_width", 3),
+        min_height=p.get("min_height", 3), max_height=p.get("max_height", 5),
+        min_length=p.get("min_length", 2), max_length=p.get("max_length", 4),
+        step=p.get("step", 3),
+    )
+    if not candidates:
+        return jsonify({"error": "No candidate stopes"}), 400
+
+    result = run_stochastic_optimization(
+        cache["df_econ"], candidates, b2s,
+        n_simulations=p.get("n_simulations", 15),
+        p_min=p.get("p_min", 0.7),
+    )
+    return jsonify(np_safe(result))
+
+
+# ── Multi-Objective Optimization ──────────────────────────────────────────────
+
+@app.route("/api/multi-objective", methods=["POST"])
+def api_multi_objective():
+    if "df_econ" not in cache:
+        return jsonify({"error": "Generate block model first"}), 400
+    p = request.json
+    block_size = cache["block_size"]
+    from stope_generator import generate_candidate_stopes
+    candidates, b2s = generate_candidate_stopes(
+        cache["df_econ"], block_size=block_size,
+        step=p.get("step", 3),
+    )
+    if not candidates:
+        return jsonify({"error": "No candidate stopes"}), 400
+
+    result = run_multi_objective_optimization(
+        candidates, b2s,
+        alpha1=p.get("alpha1", 1.0),
+        alpha2=p.get("alpha2", 0.5),
+        alpha3=p.get("alpha3", 0.3),
+        n_epsilon_steps=p.get("n_steps", 7),
+    )
+    return jsonify(np_safe(result))
+
+
+# ── Implicit Geological Modeling ──────────────────────────────────────────────
+
+@app.route("/api/implicit-geology", methods=["POST"])
+def api_implicit_geology():
+    if "block_model" not in cache and "bolani_composites" not in cache:
+        return jsonify({"error": "Generate block model first"}), 400
+    p = request.json
+    if "bolani_composites" in cache:
+        df = cache["bolani_composites"].rename(columns={"fe": "grade_au_gt"})
+        grade_col = "grade_au_gt"
+    else:
+        df = cache["block_model"]
+        grade_col = "grade_au_gt"
+    block_df = cache.get("bolani_block_model") or cache.get("df_econ")
+    result = build_implicit_model(
+        df, block_df=block_df,
+        grade_col=grade_col,
+        ore_threshold=p.get("ore_threshold"),
+        block_size=cache.get("block_size", 5),
+    )
+    return jsonify(np_safe(result))
+
+
+# ── Ventilation Design ────────────────────────────────────────────────────────
+
+@app.route("/api/ventilation", methods=["POST"])
+def api_ventilation():
+    if "opt_result" not in cache or not cache["opt_result"]["selected"]:
+        return jsonify({"error": "Run optimization first"}), 400
+    p = request.json
+    selected = cache["opt_result"]["selected"]
+    dev_segs = cache.get("dev", {}).get("segments", [])
+    result = design_ventilation_network(
+        dev_segs, selected,
+        diesel_power_kw=p.get("diesel_kw", 500),
+        ambient_temp_c=p.get("ambient_temp", 20),
+    )
+    cache["ventilation"] = result
+    return jsonify(np_safe(result))
+
+
+# ── Backfill Optimization ─────────────────────────────────────────────────────
+
+@app.route("/api/backfill", methods=["POST"])
+def api_backfill():
+    if "opt_result" not in cache or not cache["opt_result"]["selected"]:
+        return jsonify({"error": "Run optimization first"}), 400
+    p = request.json
+    selected = cache["opt_result"]["selected"]
+    result = optimize_backfill(
+        selected,
+        block_size=cache.get("block_size", 5),
+        fill_type=p.get("fill_type", "paste"),
+        batch_capacity_m3_day=p.get("batch_capacity", 500),
+    )
+    cache["backfill"] = result
     return jsonify(np_safe(result))
 
 

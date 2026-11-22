@@ -406,9 +406,119 @@ The application follows a RESTful API architecture:
 \texttt{/api/scenarios/compare} & POST & Compare all saved scenarios \\
 \texttt{/api/scenarios/delete/<id>} & DELETE & Remove a scenario \\
 \texttt{/healthz} & GET & Health check for deployment monitoring \\
+\texttt{/api/bolani/load} & POST & Load Bolani drillhole composites \\
+\texttt{/api/bolani/block-model} & POST & Build IDW block model from drillholes \\
+\texttt{/api/reserve-report} & POST & JORC/NI~43-101 reserve table \\
+\texttt{/api/stochastic-optimize} & POST & Stochastic optimization (SGS) \\
+\texttt{/api/multi-objective} & POST & $\varepsilon$-constraint Pareto optimization \\
+\texttt{/api/implicit-geology} & POST & RBF implicit geological model \\
+\texttt{/api/ventilation} & POST & Hardy Cross ventilation design \\
+\texttt{/api/backfill} & POST & Network flow backfill optimizer \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+% -----------------------------------------------------------
+\subsection{Bolani Iron Ore Dataset Integration}
+\label{sec:bolani}
+
+The Bolani iron ore deposit (Jharkhand, India) drillhole dataset, exported from Surpac, is integrated directly into the platform. It comprises collar, survey, assay, and geology tables from 29 vertical drillholes. The assay table records Fe\%, SiO$_2$\%, Al$_2$O$_3$\%, P, and S at 0.3--3\,m sample intervals, compositing to 585 intervals. Key statistical properties:
+
+\begin{itemize}
+  \item Mean Fe\% = 63.4\,\%, Max Fe\% = 69.7\,\%
+  \item Lithocodes include HMO (Hard Massive Ore), LIO (Lateritic Iron Ore), HLO (Hard Laminated Ore), and Lat (Laterite)
+  \item Composites are desurveyed to 3D coordinates and IDW-interpolated onto a regular block grid
+\end{itemize}
+
+The platform renders an interactive 3D drillhole viewer coloured by Fe grade, normal/log-normal distribution histograms, Fe--SiO$_2$ and Fe--Al$_2$O$_3$ scatter plots, Fe vs depth profiles, and an experimental variogram — replicating the standard Surpac analytical suite in the browser.
+
+% -----------------------------------------------------------
+\subsection{Reserve Reporting (JORC / NI 43-101)}
+\label{sec:reserve}
+
+The Reserve Reporting module generates compliant resource classification tables. Blocks are assigned to Measured, Indicated, or Inferred categories based on proximity to drillhole data (Measured $<$50\,m, Indicated 50--100\,m, Inferred $>$100\,m) or rock type confidence. The module outputs:
+
+\begin{enumerate}
+  \item A per-classification summary table (tonnes, mean grade, contained metal, in-situ value)
+  \item A cutoff grade sensitivity table sweeping from $0.5\times$ to $2\times$ the base cutoff
+  \item A grade--tonnage curve showing the trade-off between resource size and grade
+\end{enumerate}
+
+Economic value per classification is computed as:
+\begin{equation}
+  V = M_{\text{metal}} \cdot P - T \cdot C_{\text{opex}}
+\end{equation}
+where $M_{\text{metal}}$ is contained metal (oz or tonnes), $P$ is commodity price, $T$ is ore tonnage, and $C_{\text{opex}}$ is total operating cost per tonne.
+
+% -----------------------------------------------------------
+\subsection{Stochastic Stope Optimization}
+\label{sec:stochastic}
+
+Classical BILP optimizes on the \emph{deterministic} grade estimate, ignoring grade uncertainty. The stochastic extension generates $K$ conditional grade simulations via a simplified Sequential Gaussian Simulation (SGS) approach and evaluates stope economics on each. A stope is classified as viable only if:
+
+\begin{equation}
+  P(V_i > 0) \geq p_{\min}
+\end{equation}
+
+where $V_i$ is the stope economic value and $p_{\min}$ (default 0.70) is a user-controlled confidence threshold. Only viable stopes enter the final BILP, producing a risk-adjusted selection. The 3D confidence scatter visualizes $P(V>0)$ spatially across all candidate stopes.
+
+% -----------------------------------------------------------
+\subsection{Multi-Objective Stope Optimization}
+\label{sec:multiobjective}
+
+The standard BILP maximizes a single NPV objective. The multi-objective extension uses the $\varepsilon$-constraint method to explore the Pareto frontier across three objectives:
+
+\begin{equation}
+  \text{Maximize:} \quad \alpha_1 \cdot \text{NPV} - \alpha_2 \cdot R_{\text{geo}} - \alpha_3 \cdot C_{\text{dev}}
+\end{equation}
+\begin{equation}
+  \text{Subject to:} \quad R_{\text{geo}} \leq \varepsilon_{\text{risk}}, \quad C_{\text{dev}} \leq \varepsilon_{\text{capex}}
+\end{equation}
+
+The geotechnical risk index $R_{\text{geo}}$ is approximated by the mean height-to-width ratio of selected stopes, normalised to [0,1]. The $\varepsilon$-sweep (8 steps) generates a Pareto frontier visualised in both 2D (NPV vs Risk) and 3D (NPV--Risk--Cost space), enabling mine planners to select a preferred trade-off point.
+
+% -----------------------------------------------------------
+\subsection{3D Implicit Geological Modeling}
+\label{sec:implicit}
+
+Geological boundaries are delineated using Radial Basis Function (RBF) implicit modeling. Each drillhole sample is assigned a signed value ($+1$ = ore, $-1$ = waste) relative to the cutoff grade, and a thin-plate spline RBF interpolates these values onto a 3D grid:
+
+\begin{equation}
+  f(\mathbf{x}) = \sum_{i=1}^{n} \lambda_i \phi(\|\mathbf{x} - \mathbf{x}_i\|)
+\end{equation}
+
+The iso-surface at $f = 0$ defines the ore boundary. Fault zones are identified from high gradient magnitudes $\|\nabla f\|$. The 3D viewer renders ore zones (orange), waste (grey), the iso-surface (blue), and fault zones (red) simultaneously, allowing detailed geological inspection.
+
+% -----------------------------------------------------------
+\subsection{Ventilation Network Design}
+\label{sec:ventilation}
+
+The ventilation module automatically derives a circuit from the development network using the Hardy Cross iterative method. Airflow quantities are balanced by repeated application of the loop correction:
+
+\begin{equation}
+  \Delta Q = -\frac{\sum R_j Q_j |Q_j|}{2 \sum R_j |Q_j|}
+\end{equation}
+
+Minimum airflow requirements follow the regulatory standard of $\geq 0.06$\,m$^3$/s per kW of diesel power. Wet-bulb temperature at depth is estimated from the geothermal gradient:
+
+\begin{equation}
+  T_{\text{WBT}} = T_{\text{ambient}} + 0.6 \cdot \nabla T_{\text{geo}} \cdot z
+\end{equation}
+
+Compliance with the $\leq 27$\,\textdegree C WBT limit is verified automatically, and booster fan locations are flagged for branches with $\Delta P > 500$\,Pa.
+
+% -----------------------------------------------------------
+\subsection{Backfill Optimization}
+\label{sec:backfill}
+
+Extracted primary stopes must be filled before adjacent secondary stopes can be safely mined. The backfill optimizer formulates this as a network flow problem:
+
+\begin{equation}
+  \text{Minimize:} \quad C_{\text{fill}} \cdot \sum_i V_i^{\text{fill}}
+  \quad \text{subject to: fill primary before secondary mining}
+\end{equation}
+
+Stopes are classified as primary (even-column index) or secondary (odd-column) based on spatial arrangement. A precedence graph encodes fill dependencies, and batched fill scheduling minimises idle time within the user-specified daily plant capacity. Both paste fill (\$120/m$^3$) and cemented rockfill (CRF, \$85/m$^3$) are supported. The waterfall chart shows how fill costs reduce total stope value to arrive at net project value.
 
 % -----------------------------------------------------------
 \subsection{Ordinary Kriging Grade Estimation}
@@ -560,36 +670,19 @@ Automated_Underground_Mine_design/
 \section{Future Works}
 \label{sec:future}
 
-The platform already implements Phases 1--7 covering block model generation, economic evaluation, BILP stope optimization, mine layout, Monte Carlo simulation, ML grade prediction, production scheduling, geotechnical assessment, Ordinary Kriging, and multi-scenario comparison. The following directions represent the next frontier of research and development:
+The platform now implements a comprehensive 18-tab pipeline covering: block model generation, economic evaluation, BILP stope optimization, mine layout, Monte Carlo simulation, ML grade prediction, production scheduling, geotechnical assessment, Ordinary Kriging, multi-scenario comparison, Bolani real-data integration, JORC reserve reporting, stochastic stope optimization, multi-objective Pareto optimization, 3D implicit geological modeling, ventilation network design, and backfill optimization. The following directions represent the next frontier of research and development:
 
 % --- Near-term ---
-\subsection{Real Drillhole Data Integration}
-Support direct import of exploration drillhole assay data (CSV, Surpac DAT, Leapfrog CSV) including collar, survey, and assay tables. The platform would composite downhole assays to block centroids, replacing the synthetic model with actual deposit data. This is the single most impactful near-term extension, enabling the system to be applied to live feasibility studies.
-
 \subsection{Advanced Kriging Variants}
 Extend the current Ordinary Kriging implementation to include:
 \begin{itemize}[itemsep=0.1em]
     \item \textbf{Simple Kriging (SK):} assumes stationary mean, appropriate when the global mean is known
-    \item \textbf{Indicator Kriging (IK):} estimates probability of grade exceeding a threshold, enabling probabilistic resource classification (Measured / Indicated / Inferred per JORC/NI~43-101)
-    \item \textbf{Sequential Gaussian Simulation (SGS):} generates multiple equiprobable grade realisations, providing a full uncertainty model for risk-based resource estimation
+    \item \textbf{Indicator Kriging (IK):} estimates probability of grade exceeding a threshold, enabling probabilistic resource classification per JORC/NI~43-101
+    \item \textbf{Sequential Gaussian Simulation (SGS):} full spatial uncertainty model via multiple equiprobable grade realisations. Currently the platform uses a simplified SGS; a full spectral-based or LU decomposition SGS would provide more rigorous uncertainty quantification
+    \item \textbf{Cokriging:} jointly estimate correlated variables (e.g.\ Fe and SiO$_2$ in iron ore) to improve estimation accuracy
 \end{itemize}
 
-\subsection{Backfill Optimization}
-Model cemented rockfill (CRF) and paste fill requirements for extracted stopes. Backfill decisions are interdependent---filling a primary stope unlocks adjacent secondary stopes for extraction. The optimization problem can be formulated as a network flow model:
-\begin{equation}
-    \text{Minimize:} \quad C_{\text{fill}} \cdot \sum_i V_i^{\text{fill}} \quad \text{subject to: fill before secondary mining}
-\end{equation}
-This is essential for sub-level open stoping and longhole retreat mining methods where the primary/secondary sequencing governs dilution and ground stability.
-
-\subsection{Ventilation Network Design}
-Automatically generate a ventilation circuit based on the development network and stope geometry. Using Hardy Cross or LP-based airflow optimization, the system would:
-\begin{itemize}[itemsep=0.1em]
-    \item Calculate airflow requirements per working face (diesel equipment, blasting re-entry)
-    \item Size fans and determine booster fan locations
-    \item Verify compliance with regulatory limits: $\geq 0.06\,\text{m}^3/\text{s}$ per kW of diesel, $<27^\circ$C wet bulb temperature
-\end{itemize}
-
-\subsection{Dynamic Grade Control}
+\subsection{Dynamic Grade Control and Mine Reconciliation}
 Extend the production scheduler to incorporate real-time blast sampling data and reconcile planned vs.\ actual grade per period. Grade control reconciliation---comparing resource model grades to mill feed---is a standard operational KPI at every producing mine. The platform would track:
 \begin{itemize}[itemsep=0.1em]
     \item F-factor (predicted vs.\ actual tonnage reconciliation)
@@ -597,33 +690,43 @@ Extend the production scheduler to incorporate real-time blast sampling data and
     \item Cumulative metal deviation from mine plan
 \end{itemize}
 
-\subsection{3D Implicit Geological Modeling}
-Integrate signed distance field (SDF) or radial basis function (RBF) implicit modeling to delineate ore zone boundaries, faults, and lithological contacts from drillhole data. The geological wireframes would constrain stope generation (no stopes crossing geological boundaries) and improve geotechnical assessment (fault proximity hazard).
-
-\subsection{Multi-Objective Stope Optimization}
-Extend the BILP formulation to simultaneously optimize NPV, geotechnical risk, and development cost using the $\varepsilon$-constraint method:
-
-\begin{align}
-    \text{Maximize:} \quad & \alpha_1 \cdot \text{NPV} - \alpha_2 \cdot R_{\text{geo}} - \alpha_3 \cdot C_{\text{dev}} \\
-    \text{Subject to:} \quad & R_{\text{geo}} \leq \varepsilon_{\text{risk}}, \quad C_{\text{dev}} \leq \varepsilon_{\text{capex}}
-\end{align}
-
-Pareto frontier visualization across the NPV--Risk--Cost space would let mine planners select a preferred trade-off point, moving beyond single-objective optimization.
-
-\subsection{Stochastic Stope Optimization Under Grade Uncertainty}
-Rather than optimizing on the deterministic grade estimate, generate $K$ conditional simulations of the grade field (via SGS) and solve the stope optimization on each. The result is a distribution of optimal stope layouts, enabling probabilistic selection of stopes with high probability of economic viability:
-\begin{equation}
-    \text{Select stope } i \quad \text{if} \quad P(V_i > 0) \geq p_{\min}
-\end{equation}
-
-\subsection{Reserve Reporting Module}
-Generate JORC/NI~43-101 compliant reserve summary tables with tonnage and grade by resource classification (Measured, Indicated, Inferred), cutoff grade sensitivity, and pit/stope shell economics. Currently the platform computes in-pit/in-stope economics but does not format them for formal reporting.
+\subsection{Full LP-Based Ventilation Optimization}
+The current Hardy Cross implementation assumes a single main loop. A complete mine ventilation model would use a linear programming formulation over the full branch network, incorporating:
+\begin{itemize}[itemsep=0.1em]
+    \item Multi-fan interaction and fan characteristic curves
+    \item Leakage through unsealed roadways
+    \item Time-of-day blasting re-entry windows
+    \item Diesel particulate matter (DPM) concentration modeling
+\end{itemize}
 
 \subsection{Digital Twin Integration}
-Connect the platform to underground mine sensors (blast monitoring, seismic networks, real-time vehicle tracking) via MQTT or REST data streams. The digital twin would update the geotechnical model in real time as mining progresses, flagging stopes where measured rock behaviour diverges from design assumptions.
+Connect the platform to underground mine sensors (blast monitoring, seismic networks, real-time vehicle tracking, continuous atmospheric monitors) via MQTT or REST data streams. The digital twin would update the geotechnical and ventilation models in real time as mining progresses, flagging stopes where measured rock behaviour or atmospheric conditions diverge from design assumptions.
+
+\subsection{Stope Dilution and Ore Loss Modeling}
+Current stope values assume perfect extraction with no dilution. A dilution model would:
+\begin{itemize}[itemsep=0.1em]
+    \item Apply the modified dilution approach (MDA) of Clark and Pakalnis (1997)
+    \item Model overbreak as a function of Mathews stability number and stope hydraulic radius
+    \item Feed diluted grades back into the NPV and production schedule, capturing the impact of geotechnical design on economic performance
+\end{itemize}
+
+\subsection{Open Pit Integration and Pit-to-Underground Transition}
+Extend the platform to model the transition from open pit to underground mining. The pit optimiser (Lerchs-Grossmann algorithm) would define the pit shell, below which the underground BILP operates. The combined platform would optimise the transition depth --- the elevation where underground extraction first becomes more economic than pit mining --- accounting for crown pillar design and cave initiation criteria.
 
 \subsection{Cloud-Native Multi-User Deployment}
 Containerize the application with Docker and Kubernetes, replace the in-memory cache with Redis or PostgreSQL, and add OAuth2 authentication. A Celery + Redis job queue would handle concurrent long-running optimizations. This would support project-level collaboration where geologists, engineers, and planners each have role-specific views of the same underlying model.
+
+\subsection{BIM/IFC Export for Mine Infrastructure}
+Export the development network, stope wireframes, ventilation circuit, and backfill plan as standard Building Information Modelling (BIM / IFC 4.3) files for direct import into civil and structural engineering workflows, enabling cost estimation, procurement planning, and construction sequencing in tools such as Revit or Tekla.
+
+\subsection{Automated Drilling and Blasting Design}
+Given a selected stope, automatically generate the blast pattern (number of rings, burden, spacing, subdrill) using empirical equations (Langefors--Kihlström), specify explosive type and load per hole, and compute fragmentation size distribution via the Kuz-Ram model. The fragmentation output would feed back into the processing cost model (finer fragmentation lowers mill energy consumption).
+
+\subsection{Machine Learning-Assisted Mine Planning}
+Train a graph neural network (GNN) on historical mine plan data to predict optimal stope sequences directly, bypassing the BILP solver for rapid scenario screening. The GNN would encode the spatial adjacency structure of candidate stopes as a graph and output a ranked ordering, with the BILP used for final verification of the top-ranked candidate.
+
+\subsection{Real-Time Cost Tracking and ERP Integration}
+Connect the production schedule to enterprise resource planning (ERP) systems (SAP, Oracle) via REST APIs to track actual vs.\ planned costs in real time. Variance alerts would flag cost overruns at the stope level, enabling proactive re-sequencing to protect project NPV.
 
 % ============================================================
 \section{Conclusion}
@@ -633,7 +736,9 @@ This project demonstrates that modern computational methods---operations researc
 
 The platform reduces the mine design cycle from days or weeks of manual iteration to under 60 seconds of automated computation. The BILP formulation provides provably optimal stope layouts; the Monte Carlo engine quantifies project risk with full NPV distributions; Ordinary Kriging delivers industry-standard resource estimates; and the Mathews method provides geotechnical risk classification---all within a single browser-based interface accessible without expensive commercial software licenses.
 
-The gold-specific geological model, with its log-normal grade distribution (CV~$\approx$180\%), nugget effect, and vein-hosted structures, accurately captures the characteristics that distinguish gold from base-metal deposits and make it one of the most challenging commodities for resource estimation. The 11-tab interactive dashboard makes these advanced methods accessible to mining engineering students, researchers, and industry practitioners alike.
+The gold-specific geological model, with its log-normal grade distribution (CV~$\approx$180\%), nugget effect, and vein-hosted structures, accurately captures the characteristics that distinguish gold from base-metal deposits and make it one of the most challenging commodities for resource estimation. Integration of the real Bolani iron ore drillhole dataset further validates the platform's flexibility across commodity types and geological settings.
+
+The 18-tab interactive dashboard --- spanning JORC reserve reporting, stochastic and multi-objective stope optimization, 3D implicit geological modeling, ventilation circuit design, and backfill scheduling --- represents a substantial step towards a comprehensive, open-source mine planning environment. These advanced methods, previously accessible only through expensive commercial software requiring specialist training, are now available to mining engineering students, researchers, and industry practitioners via a web browser.
 
 % ============================================================
 \begin{thebibliography}{9}

@@ -1,6 +1,10 @@
 # MineOptima — Automated Underground Mine Design
 
-An integrated computational platform that combines **Operations Research**, **Machine Learning**, and **Monte Carlo simulation** to automate underground stope layout optimization. The system replaces weeks of manual mine design iteration with an intelligent pipeline that runs in under 60 seconds.
+**🌐 Live Demo: [https://mineoptima.onrender.com](https://mineoptima.onrender.com)**
+
+> ⚡ **Cloud tip:** The free Render host has a 30-second request timeout. Use the default small grid (20×15×10) and 300 simulations online. Run locally for full-size models (40×30×20).
+
+An integrated computational platform that combines **Operations Research**, **Machine Learning**, **Geostatistics**, and **Monte Carlo simulation** to automate underground gold mine design. The system replaces weeks of manual mine design iteration with an intelligent pipeline.
 
 Built with a **Flask + Python** backend and an interactive **Plotly.js** frontend.
 
@@ -17,7 +21,10 @@ Built with a **Flask + Python** backend and an interactive **Plotly.js** fronten
 - **ML Grade Prediction** — Random Forest / Gradient Boosting with 11 spatial features, uncertainty quantification via tree variance
 - **Production Scheduling** — Grade-priority stope sequencing, annual mining rate control, DCF NPV with configurable discount rate, cumulative cash flow tracking
 - **Geotechnical Assessment** — Mathews stability graph method, in-situ stress analysis, pillar Factor of Safety, risk classification (Low/Medium/High/Critical)
-- **Interactive Web Dashboard** — 9-tab interface with 3D Plotly visualization, real-time parameter controls, responsive dark-themed UI
+- **Ordinary Kriging** — Full geostatistical grade estimation with experimental variogram, Spherical/Exponential/Gaussian model fitting, kriging variance, cross-validation
+- **Multi-Scenario Comparison** — Save multiple optimization runs and compare NPV, tonnage, grade, stope count side-by-side
+- **Interactive Web Dashboard** — 11-tab interface with 3D Plotly visualization, real-time parameter controls, responsive dark-themed UI
+- **Health Endpoint** — `/healthz` for cloud deployment monitoring
 
 ---
 
@@ -174,18 +181,29 @@ The app will start on **http://localhost:5050**. Open this URL in your browser.
 
 ## Deployment
 
-To deploy online, you can use:
+**Live:** [https://mineoptima.onrender.com](https://mineoptima.onrender.com)
 
-- **Render** — connect your GitHub repo, set build command `pip install -r requirements.txt`, start command `python flask_app.py`
-- **Railway** — similar setup, auto-detects Python
-- **AWS / GCP / Azure** — deploy as a Docker container or on a VM
+### Render (current hosting)
 
-For production, use a WSGI server:
+1. Connect your GitHub repo on [render.com](https://render.com)
+2. Build command: `pip install -r requirements.txt`
+3. Start command: `gunicorn flask_app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --threads 4`
+   (or just use the included `Procfile` — Render picks it up automatically)
+4. Add environment variable: `PORT=10000`
+
+> **Free tier limit:** 30-second HTTP timeout. Use small grid defaults (20×15×10, step 3, 300 simulations) on the hosted version. Run locally for full-resolution models.
+
+### Local (full speed)
 
 ```bash
-pip install gunicorn
-gunicorn flask_app:app --bind 0.0.0.0:5050
+python flask_app.py          # dev server on :5050
+# or
+gunicorn flask_app:app --bind 0.0.0.0:5050 --timeout 120 --threads 4
 ```
+
+### Other platforms
+- **Railway** — same setup, auto-detects Python and `Procfile`
+- **AWS / GCP / Azure** — deploy as a Docker container or on a VM
 
 ---
 
