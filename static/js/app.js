@@ -1628,9 +1628,106 @@ async function runImplicitGeology() {
   hideTabLoading('tab-implicit');
 }
 
-// ===== VENTILATION NETWORK =====
+// ===== CSV UPLOAD — Custom Drillhole Data =====
+async function uploadCSVData() {
+  const collarFile  = document.getElementById('csv-collar')?.files[0];
+  const assayFile   = document.getElementById('csv-assay')?.files[0];
+  const geoFile     = document.getElementById('csv-geology')?.files[0];
+  const surveyFile  = document.getElementById('csv-survey')?.files[0];
+
+  if (!collarFile || !assayFile) {
+    document.getElementById('csv-status').textContent = 'Collar and Assay CSVs are required.';
+    document.getElementById('csv-status').className = 'status-msg error';
+    return;
+  }
+
+  document.getElementById('csv-status').textContent = 'Uploading…';
+  document.getElementById('csv-status').className = 'status-msg';
+
+  const form = new FormData();
+  form.append('collar', collarFile);
+  form.append('assay', assayFile);
+  if (geoFile)    form.append('geology', geoFile);
+  if (surveyFile) form.append('survey', surveyFile);
+
+  try {
+    const res = await fetch('/api/csv/upload', { method: 'POST', body: form });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+
+    document.getElementById('csv-status').innerHTML =
+      `✅ Loaded <b>${d.n_drillholes}</b> drillholes · <b>${d.n_composites}</b> composites<br>
+       Columns detected: ${d.columns.join(', ')}`;
+    document.getElementById('csv-status').className = 'status-msg success';
+
+    // Show preview table
+    const preview = d.preview;
+    if (preview && preview.length) {
+      const cols = Object.keys(preview[0]);
+      let html = `<table style="width:100%;border-collapse:collapse;font-size:0.78rem;margin-top:8px">
+        <tr style="border-bottom:1px solid #334155">${cols.map(c => `<th style="padding:3px 6px;text-align:left">${c}</th>`).join('')}</tr>`;
+      preview.forEach(row => {
+        html += `<tr style="border-bottom:1px solid #1e293b">${cols.map(c => `<td style="padding:3px 6px">${row[c] ?? ''}</td>`).join('')}</tr>`;
+      });
+      html += '</table>';
+      document.getElementById('csv-preview').innerHTML = html;
+      document.getElementById('csv-preview').style.display = 'block';
+    }
+
+    // Populate drillhole selector from uploaded data
+    bolaniDrillholes = d.drillholes;
+    bolaniLoaded = true;
+    document.getElementById('btn-bolani-bm').disabled = false;
+
+    const sel = document.getElementById('p_dh_select');
+    sel.innerHTML = '<option value="ALL">All Drillholes (overlay)</option>';
+    bolaniDrillholes.forEach(bh => {
+      const opt = document.createElement('option');
+      opt.value = bh; opt.textContent = bh;
+      sel.appendChild(opt);
+    });
+    document.getElementById('bolani-dh-section').style.display = 'block';
+
+    // Update metrics
+    document.getElementById('bolani-metrics').style.display = 'flex';
+    document.getElementById('m_bh_count').textContent = d.n_drillholes;
+    document.getElementById('m_comp_count').textContent = d.n_composites;
+    if (d.fe_mean !== undefined) {
+      document.getElementById('m_fe_mean').textContent = d.fe_mean.toFixed(1) + '%';
+      document.getElementById('m_fe_max_val').textContent = d.fe_max.toFixed(1) + '%';
+    }
+
+    // Draw 3D drillhole viewer
+    if (d.composites) {
+      const c = d.composites;
+      Plotly.newPlot('chart-bolani-3d', [{
+        x: c.x, y: c.y, z: c.z, mode: 'markers', type: 'scatter3d',
+        marker: {
+          size: 5,
+          color: c.fe || c.grade || c.z,
+          colorscale: 'RdYlGn', showscale: true, opacity: 0.85,
+          colorbar: { title: d.grade_col || 'Grade', thickness: 14 },
+        },
+        text: (c.fe || c.grade || []).map((f, i) => `${(c.bh||[])[i]||''}: ${(d.grade_col||'val')}=${f?.toFixed?.(1)||f}`),
+        hoverinfo: 'text', name: 'Composites',
+      }], {
+        ...plotlyDarkLayout,
+        scene: { ...plotly3dScene, zaxis: { ...plotly3dScene.zaxis, title: 'RL (m)' } },
+        title: { text: 'Uploaded Drillholes — 3D View', font: { size: 14 } },
+        height: 480,
+      }, plotlyConfig);
+    }
+
+    updateDHProfile();
+
+  } catch(e) {
+    document.getElementById('csv-status').textContent = 'Upload failed: ' + e.message;
+    document.getElementById('csv-status').className = 'status-msg error';
+  }
+}
+
 async function runVentilation() {
-  showTabLoading('tab-ventilation', 'Designing ventilation circuit (Hardy Cross)…');
+  showTabLoading('tab-ventilation', 'Designing ventilation circuit (Hardy Cross)...');
   try {
     const d = await apiCall('/api/ventilation', {
       diesel_kw: +document.getElementById('p_diesel_kw').value,

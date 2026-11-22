@@ -3,6 +3,7 @@
 import sys
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request
+from werkzeug.utils import secure_filename
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
@@ -813,6 +814,138 @@ def api_backfill():
     )
     cache["backfill"] = result
     return jsonify(np_safe(result))
+
+
+# ── CSV Upload — Custom drillhole data ──────────────────────────────────────
+
+@app.route("/api/csv/upload", methods=["POST"])
+def api_csv_upload():
+    """Accept user-uploaded collar + assay (+ optional geology/survey) CSVs,
+    parse them into the same format as the Bolani loader, cache the result."""
+    try:
+        collar_file = request.files.get("collar")
+        assay_file  = request.files.get("assay")
+        geo_file    = request.files.get("geology")
+        survey_file = request.files.get("survey")
+
+        if not collar_file or not assay_file:
+            return jsonify({"error": "collar and assay CSV files are required"}), 400
+
+        collar = pd.read_csv(collar_file)
+        assay  = pd.read_csv(assay_file)
+
+        # Normalise column names to lower-case, strip spaces
+        collar.columns = [c.strip().lower().replace(" ", "_") for c in collar.columns]
+        assay.columns  = [c.strip().lower().replace(" ", "_") for c in assay.columns]
+
+        # Try to identify the drillhole ID column
+        bh_candidates = ["bh_no", "bhno", "hole_id", "holeid", "dhno", "drillhole", "bh", "id"]
+        bh_col_collar = next((c for c in bh_candidates if c in collar.columns), collar.columns[0])
+        bh_col_assay  = next((c for c in bh_candidates if c in assay.columns), assay.columns[0])
+        collar = collar.rename(columns={bh_col_collar: "bh_no"})
+        assay  = assay.rename(columns={bh_col_assay:  "bh_no"})
+
+        # Coordinate columns
+        for old, new in [("easting","e"),("northing","n"),("elevation","z"),("rl","z"),("x","e"),("y","n")]:
+            if old in collar.columns and new not in collar.columns:
+                collar = collar.rename(columns={old: new})
+        if "e" not in collar.columns: collar["e"] = 0.0
+        if "n" not in collar.columns: collar["n"] = 0.0
+        if "z" not in collar.columns: collar["z"] = 0.0
+        if "depth" not in collar.columns:
+            depth_cand = [c for c in collar.columns if "depth" in c or "length" in c]
+            collar["depth"] = collar[depth_cand[0]] if depth_cand else 100.0
+
+        # From/To columns in assay
+        for old, new in [("from_m","from"),("to_m","to"),("depth_from","from"),("depth_to","to")]:
+            if old in assay.columns and new not in assay.columns:
+                assay = assay.rename(columns={old: new})
+        if "from" not in assay.columns: assay["from"] = 0.0
+        if "to"   not in assay.columns: assay["to"]   = assay["from"] + 1.0
+
+        # Detect grade columns
+        grade_candidates = ["fe","au","cu","pb","zn","ni","grade","value","assay"]
+        grade_cols = [c for c in assay.columns if any(g in c for g in grade_candidates)]
+        if not grade_cols:
+            grade_cols = [c for c in assay.columns if c not in ["bh_no","from","to","lithocode","rocktype"]]
+
+        # Merge collar + assay → composites
+        merged = assay.merge(collar[["bh_no","e","n","z","depth"]], on="bh_no", how="left")
+        mid = (merged["from"] + merged["to"]) / 2
+        merged["x"] = merged["e"]
+        merged["y"] = merged["n"]
+        merged["z_comp"] = merged["z"] - mid   # vertical hole desurvey
+        merged = merged.rename(columns={"z_comp": "z_dh"})
+        merged["z"] = merged["z_dh"]
+
+        # Geology
+        if geo_file:
+            geo = pd.read_csv(geo_file)
+            geo.columns = [c.strip().lower().replace(" ", "_") for c in geo.columns]
+            bh_col_geo = next((c for c in bh_candidates if c in geo.columns), geo.columns[0])
+            geo = geo.rename(columns={bh_col_geo: "bh_no"})
+            if "lithocode" not in geo.columns:
+                lit_cand = [c for c in geo.columns if "lith" in c or "rock" in c or "code" in c]
+                if lit_cand: geo = geo.rename(columns={lit_cand[0]: "lithocode"})
+            from_cand = next((c for c in geo.columns if "from" in c), None)
+            to_cand   = next((c for c in geo.columns if "to" in c and c != from_cand), None)
+            if from_cand and to_cand:
+                geo = geo.rename(columns={from_cand: "geo_from", to_cand: "geo_to"})
+                # Interval join: assign lithocode to composites
+                def assign_litho(row):
+                    sub = geo[(geo["bh_no"] == row["bh_no"]) &
+                              (geo["geo_from"] <= row["from"]) &
+                              (geo["geo_to"]   >= row["to"])]
+                    return sub["lithocode"].iloc[0] if len(sub) else "Unknown"
+                merged["lithocode"] = merged.apply(assign_litho, axis=1)
+            elif "lithocode" in geo.columns:
+                merged = merged.merge(geo[["bh_no","lithocode"]].drop_duplicates("bh_no"), on="bh_no", how="left")
+        if "lithocode" not in merged.columns:
+            merged["lithocode"] = "Unknown"
+
+        # Identify primary grade column (prefer fe, then first detected)
+        primary_grade = "fe" if "fe" in grade_cols else (grade_cols[0] if grade_cols else None)
+        if primary_grade and primary_grade in merged.columns:
+            merged[primary_grade] = pd.to_numeric(merged[primary_grade], errors="coerce")
+            fe_mean = float(merged[primary_grade].dropna().mean())
+            fe_max  = float(merged[primary_grade].dropna().max())
+        else:
+            fe_mean = fe_max = None
+
+        # Cache as bolani_composites (compatible format)
+        if primary_grade and primary_grade != "fe":
+            merged["fe"] = merged[primary_grade]
+        for col in ["sio2","al2o3"]:
+            if col not in merged.columns:
+                merged[col] = np.nan
+        cache["bolani_composites"] = merged
+        cache["bolani_collar"]     = collar
+
+        # Sample for 3D display
+        sample = merged.dropna(subset=["x","y","z"]).sample(min(2000, len(merged)), random_state=42)
+        composites = {
+            "x":  sample["x"].tolist(),
+            "y":  sample["y"].tolist(),
+            "z":  sample["z"].tolist(),
+            "fe": sample["fe"].tolist() if "fe" in sample.columns else [],
+            "litho": sample["lithocode"].tolist(),
+            "bh": sample["bh_no"].tolist(),
+        }
+
+        return jsonify(np_safe({
+            "n_drillholes": int(merged["bh_no"].nunique()),
+            "n_composites": len(merged),
+            "drillholes":   merged["bh_no"].unique().tolist(),
+            "columns":      grade_cols,
+            "grade_col":    primary_grade,
+            "fe_mean":      fe_mean,
+            "fe_max":       fe_max,
+            "composites":   composites,
+            "preview":      merged[["bh_no","from","to"] + grade_cols[:3]].head(8).fillna("").to_dict(orient="records"),
+        }))
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
