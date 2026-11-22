@@ -588,6 +588,62 @@ def api_bolani_load():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/bolani/drillhole-profile", methods=["POST"])
+def api_bolani_dh_profile():
+    """Return per-drillhole depth profiles for grade/element variation."""
+    if "bolani_composites" not in cache:
+        return jsonify({"error": "Load Bolani data first"}), 400
+    p = request.json
+    bh_no = p.get("bh_no", "ALL")
+    element = p.get("element", "fe")
+
+    df = cache["bolani_composites"].copy()
+    if bh_no != "ALL":
+        df = df[df["bh_no"] == bh_no]
+
+    df = df.dropna(subset=[element]).sort_values(["bh_no", "from"])
+
+    # Build per-drillhole series
+    drillholes = df["bh_no"].unique().tolist()
+    series = {}
+    for bh in drillholes:
+        sub = df[df["bh_no"] == bh].sort_values("from")
+        series[bh] = {
+            "depth": ((sub["from"] + sub["to"]) / 2).tolist(),
+            "value": sub[element].tolist(),
+            "litho": sub["lithocode"].tolist(),
+            "from": sub["from"].tolist(),
+            "to": sub["to"].tolist(),
+        }
+
+    # Statistics by lithology
+    litho_stats = {}
+    for litho, grp in df.groupby("lithocode"):
+        vals = grp[element].values
+        litho_stats[litho] = {
+            "mean": round(float(vals.mean()), 2),
+            "std": round(float(vals.std()), 2),
+            "min": round(float(vals.min()), 2),
+            "max": round(float(vals.max()), 2),
+            "n": int(len(vals)),
+            "values": vals.tolist()[:200],
+        }
+
+    # All values pooled for the element histogram
+    all_vals = df[element].values
+    hist_counts, hist_bins = np.histogram(all_vals, bins=25)
+
+    return jsonify(np_safe({
+        "element": element,
+        "drillholes": drillholes,
+        "series": series,
+        "litho_stats": litho_stats,
+        "histogram": {"counts": hist_counts.tolist(), "bins": hist_bins.tolist()},
+        "overall_mean": round(float(all_vals.mean()), 2),
+        "overall_std": round(float(all_vals.std()), 2),
+    }))
+
+
 @app.route("/api/bolani/block-model", methods=["POST"])
 def api_bolani_block_model():
     """Build IDW block model from Bolani composites."""

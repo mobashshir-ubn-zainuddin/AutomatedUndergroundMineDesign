@@ -602,6 +602,34 @@
           <div class="chart-container"><div id="chart-fe-depth" style="height:360px"></div></div>
           <div class="chart-container"><div id="chart-bolani-variogram" style="height:360px"></div></div>
         </div>
+        <!-- Drillhole depth profile selector -->
+        <div id="bolani-dh-section" style="display:none;margin-top:1.5rem">
+          <h4 style="color:var(--text-muted);font-size:0.9rem;margin-bottom:0.5rem">📏 Drillhole Depth Profile Viewer</h4>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem">
+            <label style="font-size:0.82rem;color:var(--text-muted)">Drillhole:
+              <select id="p_dh_select" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.5rem;margin-left:0.3rem">
+                <option value="ALL">All Drillholes (overlay)</option>
+              </select>
+            </label>
+            <label style="font-size:0.82rem;color:var(--text-muted)">Element:
+              <select id="p_dh_element" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.5rem;margin-left:0.3rem">
+                <option value="fe">Fe (%)</option>
+                <option value="sio2">SiO₂ (%)</option>
+                <option value="al2o3">Al₂O₃ (%)</option>
+              </select>
+            </label>
+            <label style="font-size:0.82rem;color:var(--text-muted)">
+              <input type="checkbox" id="p_dh_litho" checked> Colour by lithology
+            </label>
+            <button class="btn btn-outline btn-sm" onclick="updateDHProfile()">🔄 Update</button>
+          </div>
+          <div class="chart-row">
+            <div class="chart-container"><div id="chart-dh-profile" style="height:420px"></div></div>
+            <div class="chart-container"><div id="chart-dh-box" style="height:420px"></div></div>
+          </div>
+          <div class="chart-container"><div id="chart-dh-multi" style="height:380px"></div></div>
+        </div>
+
         <!-- Transparent block model (grade filtered) -->
         <div id="bolani-bm-section" style="display:none">
           <h4 style="color:var(--text-muted);font-size:0.9rem;margin-bottom:0.5rem">Transparent Block Model — Fe Grade (filtered by range)</h4>

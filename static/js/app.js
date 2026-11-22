@@ -1015,6 +1015,7 @@ async function runAdvKriging() {
 // ===== BOLANI DATA EXPLORER =====
 let bolaniLoaded = false;
 let bolaniBlockLoaded = false;
+let bolaniDrillholes = [];
 
 async function loadBolani() {
   showTabLoading('tab-bolani', 'Loading Bolani drillhole data…');
@@ -1022,7 +1023,20 @@ async function loadBolani() {
     const d = await apiCall('/api/bolani/load', {});
 
     bolaniLoaded = true;
+    bolaniDrillholes = d.drillholes.map(dh => dh.bh_no);
     document.getElementById('btn-bolani-bm').disabled = false;
+
+    // Populate drillhole selector
+    const sel = document.getElementById('p_dh_select');
+    sel.innerHTML = '<option value="ALL">All Drillholes (overlay)</option>';
+    bolaniDrillholes.forEach(bh => {
+      const opt = document.createElement('option');
+      opt.value = bh; opt.textContent = bh;
+      sel.appendChild(opt);
+    });
+    document.getElementById('bolani-dh-section').style.display = 'block';
+    // Auto-load first drillhole profile
+    updateDHProfile();
     document.getElementById('bolani-status').textContent =
       `✅ Loaded ${d.n_drillholes} drillholes · ${d.n_composites} composites`;
     document.getElementById('bolani-status').className = 'status-msg success';
@@ -1185,6 +1199,132 @@ function filterBolaniBlockModel() {
   const visible = trace.x.map((_,i) => trace.marker.color[i] >= feMin && trace.marker.color[i] <= feMax);
   const opacity = visible.map(v => v ? 0.8 : 0.0);
   Plotly.restyle('chart-bolani-bm-3d', { 'marker.opacity': [opacity] });
+}
+
+// ===== DRILLHOLE DEPTH PROFILE =====
+const LITHO_PALETTE = {
+  HMO:'#f59e0b', LIO:'#22d3ee', HLO:'#10b981', Lat:'#94a3b8',
+  HLO2:'#6366f1', PWO:'#f43f5e', Fsh:'#a78bfa', BHS:'#34d399',
+  SLO:'#fb923c', Bsh:'#60a5fa', BHJ:'#e879f9', BHC:'#facc15', Unknown:'#475569'
+};
+
+async function updateDHProfile() {
+  if (!bolaniLoaded) return;
+  const bh = document.getElementById('p_dh_select').value;
+  const element = document.getElementById('p_dh_element').value;
+  const colourByLitho = document.getElementById('p_dh_litho').checked;
+  const elemLabels = { fe: 'Fe (%)', sio2: 'SiO₂ (%)', al2o3: 'Al₂O₃ (%)' };
+  const label = elemLabels[element];
+
+  try {
+    const d = await apiCall('/api/bolani/drillhole-profile', { bh_no: bh, element });
+
+    // ── Chart 1: depth profiles ───────────────────────────────────────────
+    const profileTraces = [];
+    for (const [bh_id, s] of Object.entries(d.series)) {
+      if (colourByLitho) {
+        // Group consecutive intervals by lithology for coloured segments
+        let curLitho = s.litho[0];
+        let segDepth = [s.depth[0]], segVal = [s.value[0]];
+        for (let i = 1; i <= s.depth.length; i++) {
+          if (i < s.depth.length && s.litho[i] === curLitho) {
+            segDepth.push(s.depth[i]); segVal.push(s.value[i]);
+          } else {
+            profileTraces.push({
+              y: segDepth, x: segVal, mode: 'lines+markers', type: 'scatter',
+              name: `${bh_id} — ${curLitho}`,
+              line: { color: LITHO_PALETTE[curLitho] || '#94a3b8', width: 2 },
+              marker: { size: 5, color: LITHO_PALETTE[curLitho] || '#94a3b8' },
+              hovertemplate: `${bh_id} ${curLitho}<br>${label}: %{x:.1f}<br>Depth: %{y:.1f}m<extra></extra>`,
+            });
+            if (i < s.depth.length) {
+              curLitho = s.litho[i]; segDepth = [s.depth[i]]; segVal = [s.value[i]];
+            }
+          }
+        }
+      } else {
+        profileTraces.push({
+          y: s.depth, x: s.value, mode: 'lines+markers', type: 'scatter',
+          name: bh_id,
+          line: { width: 2 }, marker: { size: 5 },
+          hovertemplate: `${bh_id}<br>${label}: %{x:.1f}<br>Depth: %{y:.1f}m<extra></extra>`,
+        });
+      }
+    }
+    Plotly.newPlot('chart-dh-profile', profileTraces, {
+      ...plotlyDarkLayout,
+      title: { text: `${bh === 'ALL' ? 'All Drillholes' : bh} — ${label} vs Depth`, font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: label },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: 'Depth (m)', autorange: 'reversed' },
+      height: 420,
+      legend: { font: { size: 10 }, itemsizing: 'constant' },
+    }, plotlyConfig);
+
+    // ── Chart 2: box plot by lithology ────────────────────────────────────
+    const lithoNames = Object.keys(d.litho_stats).filter(l => d.litho_stats[l].n >= 3);
+    const boxTraces = lithoNames.map(litho => ({
+      y: d.litho_stats[litho].values,
+      type: 'box', name: litho,
+      marker: { color: LITHO_PALETTE[litho] || '#94a3b8' },
+      boxpoints: 'outliers', jitter: 0.3, pointpos: -1.5,
+      hovertemplate: `${litho}<br>%{y:.1f}<extra></extra>`,
+    }));
+    Plotly.newPlot('chart-dh-box', boxTraces, {
+      ...plotlyDarkLayout,
+      title: { text: `${label} Distribution by Lithology`, font: { size: 13 } },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: label },
+      height: 420,
+      showlegend: false,
+    }, plotlyConfig);
+
+    // ── Chart 3: stacked bar — mean ± std per drillhole ───────────────────
+    if (bh === 'ALL') {
+      const dhNames = Object.keys(d.series);
+      const dhMeans = dhNames.map(id => {
+        const vals = d.series[id].value;
+        return vals.length ? vals.reduce((a,b) => a+b, 0)/vals.length : 0;
+      });
+      const dhStds = dhNames.map(id => {
+        const vals = d.series[id].value;
+        if (vals.length < 2) return 0;
+        const m = dhMeans[dhNames.indexOf(id)];
+        return Math.sqrt(vals.reduce((a,b) => a + (b-m)**2, 0) / vals.length);
+      });
+      Plotly.newPlot('chart-dh-multi', [{
+        x: dhNames, y: dhMeans, type: 'bar', error_y: { type: 'data', array: dhStds, visible: true },
+        marker: { color: dhMeans, colorscale: 'RdYlGn', showscale: true,
+          colorbar: { title: label, thickness: 12 } },
+        text: dhMeans.map(v => v.toFixed(1) + '%'), textposition: 'outside',
+        name: `Mean ${label}`,
+      }], { ...plotlyDarkLayout,
+        title: { text: `Mean ${label} ± σ per Drillhole`, font: { size: 13 } },
+        xaxis: { ...plotlyDarkLayout.xaxis, title: 'Drillhole' },
+        yaxis: { ...plotlyDarkLayout.yaxis, title: label },
+        height: 380,
+      }, plotlyConfig);
+    } else {
+      // For a single drillhole: show downhole log as filled area
+      const s = d.series[bh];
+      if (s) {
+        Plotly.newPlot('chart-dh-multi', [{
+          y: s.depth, x: s.value, fill: 'tozerox', fillcolor: 'rgba(245,158,11,0.2)',
+          mode: 'lines', type: 'scatter', line: { color: '#f59e0b', width: 2 },
+          name: label,
+        }, {
+          y: s.depth, x: Array(s.depth.length).fill(d.overall_mean),
+          mode: 'lines', type: 'scatter', line: { color: '#94a3b8', dash: 'dash', width: 1.5 },
+          name: `Mean = ${d.overall_mean}%`,
+        }], { ...plotlyDarkLayout,
+          title: { text: `${bh} — ${label} Downhole Log`, font: { size: 13 } },
+          xaxis: { ...plotlyDarkLayout.xaxis, title: label },
+          yaxis: { ...plotlyDarkLayout.yaxis, title: 'Depth (m)', autorange: 'reversed' },
+          height: 380,
+        }, plotlyConfig);
+      }
+    }
+  } catch(e) {
+    console.error('DH profile error:', e);
+  }
 }
 
 // ===== RESERVE REPORTING =====
