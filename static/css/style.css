@@ -497,8 +497,70 @@ input[type="range"]::-webkit-slider-thumb {
   border-bottom: 1px solid var(--border);
   margin-bottom: 1.5rem;
   overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
+  /* Always-visible scrollbar: without it the off-screen tabs look absent */
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+  padding-bottom: 6px;
 }
+
+.tabs::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tabs::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 4px;
+}
+
+.tabs::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+.tabs::-webkit-scrollbar-thumb:hover {
+  background: var(--primary, #6366f1);
+}
+
+/* Tabs must not shrink, or they compress instead of scrolling */
+.tabs .tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.tabs-wrap {
+  position: relative;
+}
+
+.tabs-wrap .tabs {
+  padding-left: 28px;
+  padding-right: 28px;
+}
+
+.tabs-nav {
+  position: absolute;
+  top: 0;
+  z-index: 3;
+  width: 26px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tabs-nav:hover {
+  background: var(--accent);
+  color: #0f172a;
+}
+
+.tabs-nav-left { left: 0; }
+.tabs-nav-right { right: 0; }
 
 .tab {
   padding: 0.65rem 1.25rem;
