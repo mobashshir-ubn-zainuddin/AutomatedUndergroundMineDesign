@@ -8,9 +8,11 @@ const plotlyDarkLayout = {
   paper_bgcolor: 'rgba(0,0,0,0)',
   plot_bgcolor: 'rgba(0,0,0,0)',
   font: { color: '#94a3b8', family: 'Inter, system-ui, sans-serif', size: 12 },
-  margin: { l: 50, r: 20, t: 40, b: 50 },
-  xaxis: { gridcolor: '#1e293b', zerolinecolor: '#2d3a4f' },
-  yaxis: { gridcolor: '#1e293b', zerolinecolor: '#2d3a4f' },
+  // Top margin clears the mode bar; left margin fits long category labels.
+  margin: { l: 110, r: 30, t: 64, b: 56 },
+  title: { x: 0.02, xanchor: 'left', y: 0.97, yanchor: 'top' },
+  xaxis: { gridcolor: '#1e293b', zerolinecolor: '#2d3a4f', automargin: true },
+  yaxis: { gridcolor: '#1e293b', zerolinecolor: '#2d3a4f', automargin: true },
 };
 
 const plotly3dScene = {
@@ -20,7 +22,9 @@ const plotly3dScene = {
   aspectmode: 'data',
 };
 
-const plotlyConfig = { responsive: true, displayModeBar: true, displaylogo: false };
+// 'hover' keeps the mode bar off the canvas until the user reaches for it,
+// so it no longer sits on top of titles and legends.
+const plotlyConfig = { responsive: true, displayModeBar: 'hover', displaylogo: false };
 
 // ===== TABS =====
 document.querySelectorAll('.tab').forEach(tab => {
@@ -155,13 +159,50 @@ function updateBlockPlot() {
   else if (mode === 'high') d = blockData.high_grade_data;
   else d = blockData.all_blocks;
 
-  Plotly.newPlot('chart-block3d', [{
+  const isFe  = blockData.dataset === 'bolani';
+  const unit  = isFe ? '% Fe' : ' g/t';
+  const cbar  = isFe ? 'Fe (%)' : 'Grade (g/t)';
+  const scale = isFe ? 'RdYlGn' : 'YlOrRd';
+  // Transparent full block volume, so interior grade structure stays visible
+  const opacity = mode === 'all' ? 0.28 : 0.55;
+  const size    = isFe ? 4.5 : 2.5;
+
+  const traces = [{
     type: 'scatter3d', mode: 'markers',
     x: d.x, y: d.y, z: d.z,
-    marker: { size: 2.5, color: d.grade, colorscale: 'YlOrRd', colorbar: { title: 'Grade (g/t)', tickfont: { color: '#94a3b8' } }, opacity: 0.6 },
-    text: d.grade.map((g, i) => 'Grade: ' + g.toFixed(2) + ' g/t<br>Value: ' + fmt(d.value[i])),
+    marker: {
+      size, color: d.grade, colorscale: scale, opacity,
+      colorbar: { title: cbar, tickfont: { color: '#94a3b8' }, thickness: 14 },
+      cmin: Math.min(...d.grade), cmax: Math.max(...d.grade),
+    },
+    text: d.grade.map((g, i) => 'Grade: ' + g.toFixed(2) + unit + '<br>Value: ' + fmt(d.value[i])),
     hoverinfo: 'text',
-  }], { ...plotlyDarkLayout, scene: plotly3dScene, height: 600, margin: { l: 0, r: 0, t: 10, b: 0 } }, plotlyConfig);
+    name: 'Block Model',
+  }];
+
+  // Overlay the drillhole composites on the Bolani block model
+  if (isFe && blockData.drillholes && blockData.drillholes.x.length) {
+    const dh = blockData.drillholes;
+    traces.push({
+      type: 'scatter3d', mode: 'markers',
+      x: dh.x, y: dh.y, z: dh.z,
+      marker: {
+        size: 3.2, color: dh.fe, colorscale: 'RdYlGn', opacity: 1.0,
+        showscale: false, line: { color: '#0f172a', width: 0.5 },
+        cmin: Math.min(...d.grade), cmax: Math.max(...d.grade),
+      },
+      text: dh.fe.map((f, i) => `${dh.bh[i]}<br>Fe: ${f.toFixed(2)}%<br>${dh.litho[i]}`),
+      hoverinfo: 'text',
+      name: 'Drillhole Composites',
+    });
+  }
+
+  Plotly.newPlot('chart-block3d', traces, {
+    ...plotlyDarkLayout, scene: plotly3dScene, height: 600,
+    margin: { l: 0, r: 0, t: 10, b: 0 },
+    showlegend: isFe,
+    legend: { x: 0.02, y: 0.98, bgcolor: 'rgba(15,23,42,0.7)' },
+  }, plotlyConfig);
 }
 
 function plotGradeHistogram(data) {
@@ -170,7 +211,7 @@ function plotGradeHistogram(data) {
     { x: data.grade_histogram.waste_grades.filter(g => g > 0), type: 'histogram', nbinsx: 50, name: 'Waste', marker: { color: '#64748b', opacity: 0.5 } },
   ], {
     ...plotlyDarkLayout, barmode: 'overlay', title: { text: 'Grade Distribution', font: { size: 14 } },
-    xaxis: { ...plotlyDarkLayout.xaxis, title: 'Gold Grade (g/t)' },
+    xaxis: { ...plotlyDarkLayout.xaxis, title: data.dataset === 'bolani' ? 'Fe Grade (%)' : 'Gold Grade (g/t)' },
     yaxis: { ...plotlyDarkLayout.yaxis, title: 'Block Count' },
     shapes: [{ type: 'line', x0: data.cutoff_grade, x1: data.cutoff_grade, y0: 0, y1: 1, yref: 'paper', line: { color: '#ef4444', dash: 'dash', width: 2 } }],
     annotations: [{ x: data.cutoff_grade, y: 1, yref: 'paper', text: 'Cutoff: ' + data.cutoff_grade.toFixed(2), showarrow: false, font: { color: '#ef4444', size: 11 }, yanchor: 'bottom' }],
@@ -1037,10 +1078,6 @@ async function loadBolani() {
     document.getElementById('bolani-dh-section').style.display = 'block';
     // Auto-load first drillhole profile
     updateDHProfile();
-    document.getElementById('bolani-status').textContent =
-      `✅ Loaded ${d.n_drillholes} drillholes · ${d.n_composites} composites`;
-    document.getElementById('bolani-status').className = 'status-msg success';
-
     // Metrics
     document.getElementById('bolani-metrics').style.display = 'flex';
     document.getElementById('m_bh_count').textContent = d.n_drillholes;
@@ -1148,6 +1185,23 @@ async function loadBolani() {
       height: 360,
     }, plotlyConfig);
 
+    // Compound cross-plot (drawn before the slower block-model build)
+    await updateCompoundScatter();
+
+    // Build and activate the block model. Kept separate so a failure here
+    // leaves the drillhole plots above on screen.
+    document.getElementById('bolani-status').textContent =
+      `✅ Loaded ${d.n_drillholes} drillholes · Building block model…`;
+    try {
+      await buildBolaniBlockModel();
+      await bolaniUseAsModel();
+    } catch (modelErr) {
+      document.getElementById('bolani-status').innerHTML =
+        `✅ Loaded ${d.n_drillholes} drillholes · ${d.n_composites} composites.
+         <span style="color:#f59e0b">Block model step failed: ${modelErr.message}</span>`;
+      document.getElementById('bolani-status').className = 'status-msg warn';
+    }
+
   } catch (e) {
     document.getElementById('bolani-status').textContent = 'Error: ' + e.message;
     document.getElementById('bolani-status').className = 'status-msg error';
@@ -1182,9 +1236,60 @@ async function buildBolaniBlockModel() {
     }, plotlyConfig);
 
     document.getElementById('bolani-status').textContent =
-      `✅ Block model: ${d.n_blocks} blocks · Fe ${d.fe_min}–${d.fe_max}% · mean ${d.fe_mean}%`;
+      `✅ Block model: ${d.n_blocks} blocks · Fe ${d.fe_min}–${d.fe_max}% · mean ${d.fe_mean}% — Click ⚡ Use as Active Model to run Stope Opt / Ventilation / etc on this data`;
+    document.getElementById('btn-bolani-activate').disabled = false;
   } catch(e) {
     document.getElementById('bolani-status').textContent = 'Block model error: ' + e.message;
+  }
+  hideTabLoading('tab-bolani');
+}
+
+async function bolaniUseAsModel() {
+  showTabLoading('tab-bolani', 'Converting Bolani block model to active dataset…');
+  try {
+    const d = await apiCall('/api/bolani/use-as-model', {});
+    if (d.error) throw new Error(d.error);
+
+    // Make Bolani the dataset the Block Model tab renders from
+    const all = d.all_blocks;
+    d.dataset = 'bolani';
+    d.cutoff_grade = d.cutoff_fe;
+    blockData = d;
+    const hgOpt = document.querySelector('#blockViewMode option[value="high"]');
+    if (hgOpt) hgOpt.textContent = `High Grade (>${d.high_grade_threshold}% Fe)`;
+    updateBlockPlot();
+
+    // Z-level slider for the cross-section view
+    zLevels = d.z_levels;
+    const zSlider = document.getElementById('zSlider');
+    if (zSlider && zLevels.length) {
+      zSlider.max = zLevels.length - 1;
+      zSlider.value = Math.floor(zLevels.length / 2);
+      document.getElementById('zSliderVal').textContent = zLevels[zSlider.value] + 'm';
+    }
+    plotGradeHistogram(d);
+    plotGradeTonnage(d);
+
+    // Update Block Model metrics
+    document.getElementById('block-metrics').style.display = 'flex';
+    document.getElementById('m_total_blocks').textContent = d.total_blocks.toLocaleString();
+    document.getElementById('m_ore_blocks').textContent   = d.ore_blocks.toLocaleString();
+    document.getElementById('m_mean_grade').textContent   = d.mean_fe.toFixed(1) + '% Fe';
+    document.getElementById('m_max_grade').textContent    = Math.max(...all.grade).toFixed(1) + '% Fe';
+
+    document.getElementById('bolani-status').innerHTML =
+      `✅ <b>Bolani set as active model.</b> ${d.ore_blocks.toLocaleString()} ore blocks · Fe cutoff ${d.cutoff_fe.toFixed(1)}% ·
+       Now go to <b>Stope Optimization → Mine Layout → Economics → Ventilation / Backfill</b> tabs.`;
+    document.getElementById('bolani-status').className = 'status-msg success';
+
+    // Also update block status
+    document.getElementById('block-status').innerHTML =
+      `✅ Active dataset: <b>Bolani Iron Ore</b> · ${d.total_blocks} blocks · Fe cutoff ${d.cutoff_fe.toFixed(1)}%`;
+    document.getElementById('block-status').className = 'status-msg success';
+
+  } catch(e) {
+    document.getElementById('bolani-status').textContent = 'Error: ' + e.message;
+    document.getElementById('bolani-status').className = 'status-msg error';
   }
   hideTabLoading('tab-bolani');
 }
@@ -1207,6 +1312,69 @@ const LITHO_PALETTE = {
   HLO2:'#6366f1', PWO:'#f43f5e', Fsh:'#a78bfa', BHS:'#34d399',
   SLO:'#fb923c', Bsh:'#60a5fa', BHJ:'#e879f9', BHC:'#facc15', Unknown:'#475569'
 };
+
+const COMPOUND_LABEL = {
+  fe: 'Fe (%)', sio2: 'SiO₂ (%)', al2o3: 'Al₂O₃ (%)', p: 'P (%)', s: 'S (%)',
+};
+
+async function updateCompoundScatter() {
+  if (!bolaniLoaded) return;
+  const xSel = document.getElementById('p_scatter_x');
+  const ySel = document.getElementById('p_scatter_y');
+  try {
+    const d = await apiCall('/api/bolani/scatter', {
+      x: xSel.value || 'fe',
+      y: ySel.value || 'sio2',
+    });
+    if (d.error) throw new Error(d.error);
+
+    // Fill the selectors once we know which compounds were assayed
+    if (xSel.options.length === 0) {
+      d.available.forEach(c => {
+        [xSel, ySel].forEach(sel => {
+          const o = document.createElement('option');
+          o.value = c; o.textContent = COMPOUND_LABEL[c] || c.toUpperCase();
+          sel.appendChild(o);
+        });
+      });
+      xSel.value = d.x_col; ySel.value = d.y_col;
+    }
+
+    const traces = d.series.map(s => ({
+      x: s.x, y: s.y, mode: 'markers', type: 'scatter',
+      name: `${s.litho} (${s.x.length})`,
+      marker: { size: 7, color: LITHO_PALETTE[s.litho] || '#94a3b8', opacity: 0.75,
+                line: { color: '#0f172a', width: 0.5 } },
+      text: s.x.map((_, i) => `${s.bh[i]} @ ${s.depth[i]}m`),
+      hovertemplate: `%{text}<br>${COMPOUND_LABEL[d.x_col]}: %{x}<br>${COMPOUND_LABEL[d.y_col]}: %{y}<extra>${s.litho}</extra>`,
+    }));
+
+    if (document.getElementById('p_scatter_trend').checked && d.trend.x.length) {
+      traces.push({
+        x: d.trend.x, y: d.trend.y, mode: 'lines', type: 'scatter',
+        name: `Trend (r=${d.correlation})`,
+        line: { color: '#f8fafc', width: 2, dash: 'dash' }, hoverinfo: 'skip',
+      });
+    }
+
+    const strength = Math.abs(d.correlation) > 0.7 ? 'strong'
+                   : Math.abs(d.correlation) > 0.4 ? 'moderate' : 'weak';
+    document.getElementById('scatter-corr').innerHTML =
+      `n = <b>${d.n_samples}</b> · r = <b>${d.correlation}</b> (${strength} ${d.correlation < 0 ? 'negative' : 'positive'})`;
+
+    Plotly.newPlot('chart-compound-scatter', traces, {
+      ...plotlyDarkLayout,
+      title: { text: `${COMPOUND_LABEL[d.x_col]} vs ${COMPOUND_LABEL[d.y_col]} — by lithology`, font: { size: 13 } },
+      xaxis: { ...plotlyDarkLayout.xaxis, title: COMPOUND_LABEL[d.x_col] },
+      yaxis: { ...plotlyDarkLayout.yaxis, title: COMPOUND_LABEL[d.y_col] },
+      height: 460,
+      legend: { x: 1.02, y: 1, font: { size: 10 } },
+    }, plotlyConfig);
+
+  } catch (e) {
+    document.getElementById('scatter-corr').textContent = e.message;
+  }
+}
 
 async function updateDHProfile() {
   if (!bolaniLoaded) return;

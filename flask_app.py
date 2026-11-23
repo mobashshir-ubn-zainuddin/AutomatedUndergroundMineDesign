@@ -52,7 +52,14 @@ def np_safe(obj):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    # Stamp static assets with their mtime so browsers pick up edits instead of
+    # serving a stale app.js from cache.
+    stamp = 0
+    for rel in ("js/app.js", "css/style.css"):
+        f = BASE_DIR / "static" / rel
+        if f.exists():
+            stamp = max(stamp, int(f.stat().st_mtime))
+    return render_template("index.html", asset_v=stamp)
 
 
 @app.route("/healthz")
@@ -656,6 +663,7 @@ def api_bolani_block_model():
     if df_bm.empty:
         return jsonify({"error": "Block model generation failed"}), 500
     cache["bolani_block_model"] = df_bm
+    cache["bolani_block_size"]  = block_size
 
     # Grade range filtering data
     fe_min = float(df_bm["fe"].min())
@@ -671,6 +679,179 @@ def api_bolani_block_model():
             "x": sample["x"].tolist(), "y": sample["y"].tolist(),
             "z": sample["z"].tolist(), "fe": sample["fe"].tolist(),
             "sio2": sample["sio2"].tolist(), "al2o3": sample["al2o3"].tolist(),
+        },
+    }))
+
+
+@app.route("/api/bolani/scatter", methods=["POST"])
+def api_bolani_scatter():
+    """Cross-plot any two assayed compounds, split by lithology."""
+    if "bolani_composites" not in cache:
+        return jsonify({"error": "Load drillhole data first"}), 400
+
+    p = request.json or {}
+    df = cache["bolani_composites"]
+    numeric = [c for c in ("fe", "sio2", "al2o3", "p", "s")
+               if c in df.columns and df[c].notna().any()]
+    if not numeric:
+        return jsonify({"error": "No assayed compounds available"}), 400
+
+    x_col = p.get("x", "fe")
+    y_col = p.get("y", "sio2" if "sio2" in numeric else numeric[-1])
+    if x_col not in numeric or y_col not in numeric:
+        return jsonify({"error": f"Choose compounds from: {', '.join(numeric)}"}), 400
+
+    sub = df.dropna(subset=[x_col, y_col])
+    if sub.empty:
+        return jsonify({"error": f"No samples assayed for both {x_col.upper()} and {y_col.upper()}"}), 400
+
+    # One series per lithology so the plot carries geological meaning
+    series = []
+    for litho, grp in sub.groupby("lithocode"):
+        series.append({
+            "litho": str(litho),
+            "x": grp[x_col].tolist(),
+            "y": grp[y_col].tolist(),
+            "bh": grp["bh_no"].astype(str).tolist(),
+            "depth": ((grp["from"] + grp["to"]) / 2).round(1).tolist(),
+        })
+    series.sort(key=lambda s: -len(s["x"]))
+
+    corr = float(sub[x_col].corr(sub[y_col])) if len(sub) > 2 else 0.0
+    # Least-squares trend for the cross-plot
+    if len(sub) > 2:
+        slope, intercept = np.polyfit(sub[x_col], sub[y_col], 1)
+        xs = [float(sub[x_col].min()), float(sub[x_col].max())]
+        trend = {"x": xs, "y": [float(slope * v + intercept) for v in xs]}
+    else:
+        trend = {"x": [], "y": []}
+
+    return jsonify(np_safe({
+        "x_col": x_col, "y_col": y_col,
+        "available": numeric,
+        "n_samples": len(sub),
+        "correlation": round(corr, 3),
+        "trend": trend,
+        "series": series,
+    }))
+
+
+# ── Bolani → Active Model ─────────────────────────────────────────────────────
+
+@app.route("/api/bolani/use-as-model", methods=["POST"])
+def api_bolani_use_as_model():
+    """Convert the Bolani IDW block model into df_econ format so all downstream
+    tabs (Stope Optimization, Mine Layout, Economics, Ventilation, Backfill,
+    Kriging, ML, Geotechnical, Monte Carlo, Reserve Report) work on Bolani data."""
+    if "bolani_block_model" not in cache:
+        return jsonify({"error": "Build the Bolani block model first (Bolani tab → Build Block Model)"}), 400
+
+    p = request.json or {}
+    bm = cache["bolani_block_model"].copy()
+
+    # Iron ore economics: revenue per tonne scales with Fe grade.
+    # Defaults are set so the breakeven cutoff lands near 55% Fe, the usual
+    # marketable-lump threshold for Indian haematite ore.
+    fe_price_per_pct_t = p.get("fe_price_per_pct_t", 0.45)   # USD per 1% Fe per tonne
+    mining_cost      = p.get("mining_cost", 12.0)            # USD/t
+    processing_cost  = p.get("processing_cost", 8.0)         # USD/t
+    ga_cost          = p.get("ga_cost", 3.5)                 # USD/t
+    recovery         = p.get("recovery", 0.95)
+    density          = p.get("density", 3.2)                 # t/m³ for iron ore
+    block_size       = cache.get("bolani_block_size", 10)
+
+    # Map Fe% to grade_au_gt column name so all existing code works unchanged
+    bm["grade_au_gt"]   = bm["fe"].fillna(bm["fe"].median())
+    bm["density_tpm3"]  = density
+    bm["tonnage"]       = block_size ** 3 * density
+
+    revenue_per_t       = bm["grade_au_gt"] * fe_price_per_pct_t * recovery
+    cost_per_t          = mining_cost + processing_cost + ga_cost
+    bm["revenue_per_t"] = revenue_per_t.round(2)
+    bm["cost_per_t"]    = cost_per_t
+    bm["profit_per_t"]  = (revenue_per_t - cost_per_t).round(2)
+    bm["economic_value"] = (bm["tonnage"] * bm["profit_per_t"]).round(2)
+    # metal_content_oz repurposed as "contained Fe tonnes"
+    bm["metal_content_oz"] = (bm["tonnage"] * bm["grade_au_gt"] / 100.0).round(2)
+
+    breakeven = cost_per_t / (fe_price_per_pct_t * recovery)   # % Fe cutoff
+    bm["above_cutoff"] = bm["grade_au_gt"] >= breakeven
+    bm["ore_class"]    = np.where(bm["above_cutoff"], "Ore", "Waste")
+
+    # Stope generation indexes blocks by block_id, which the IDW grid lacks
+    bm = bm.reset_index(drop=True)
+    bm["block_id"] = bm.index
+
+    cache["df_econ"]      = bm
+    cache["block_model"]  = bm
+    cache["block_size"]   = block_size
+    cache["cutoff"]       = breakeven
+    cache["econ_params"]  = {
+        "gold_price": fe_price_per_pct_t * 100,  # proxy so Economics tab math works
+        "mining_cost": mining_cost,
+        "processing_cost": processing_cost,
+        "ga_cost": ga_cost,
+        "recovery": recovery,
+        "dataset": "bolani",
+    }
+
+    ore  = bm[bm["above_cutoff"]]
+    sample = bm.sample(min(5000, len(bm)), random_state=42)
+    z_levels = sorted(bm["z"].unique().tolist())
+
+    # High grade = top quartile of Fe
+    hg_threshold = float(bm["grade_au_gt"].quantile(0.75))
+    high = bm[bm["grade_au_gt"] >= hg_threshold]
+
+    # Drillhole composites, overlaid on the block model for context
+    comp = cache.get("bolani_composites")
+    dh_payload = {"x": [], "y": [], "z": [], "fe": [], "bh": [], "litho": []}
+    if comp is not None:
+        c = comp.dropna(subset=["x", "y", "z", "fe"])
+        c = c.sample(min(3000, len(c)), random_state=42)
+        dh_payload = {
+            "x": c["x"].tolist(), "y": c["y"].tolist(), "z": c["z"].tolist(),
+            "fe": c["fe"].tolist(),
+            "bh": c["bh_no"].astype(str).tolist(),
+            "litho": c.get("lithocode", pd.Series(["—"] * len(c))).astype(str).tolist(),
+        }
+
+    return jsonify(np_safe({
+        "ok": True,
+        "dataset": "Bolani Iron Ore",
+        "total_blocks": len(bm),
+        "ore_blocks": int(bm["above_cutoff"].sum()),
+        "mean_fe": round(float(bm["grade_au_gt"].mean()), 2),
+        "cutoff_fe": round(float(breakeven), 2),
+        "block_size": block_size,
+        "z_levels": z_levels,
+        "all_blocks": {
+            "x": sample["x"].tolist(), "y": sample["y"].tolist(),
+            "z": sample["z"].tolist(),
+            "grade": sample["grade_au_gt"].tolist(),
+            "value": sample["economic_value"].tolist(),
+        },
+        "ore_blocks_data": {
+            "x": ore["x"].tolist(), "y": ore["y"].tolist(),
+            "z": ore["z"].tolist(),
+            "grade": ore["grade_au_gt"].tolist(),
+            "value": ore["economic_value"].tolist(),
+        },
+        "high_grade_data": {
+            "x": high["x"].tolist(), "y": high["y"].tolist(),
+            "z": high["z"].tolist(),
+            "grade": high["grade_au_gt"].tolist(),
+            "value": high["economic_value"].tolist(),
+        },
+        "high_grade_threshold": round(hg_threshold, 2),
+        "drillholes": dh_payload,
+        "grade_histogram": {
+            "ore_grades": ore["grade_au_gt"].tolist(),
+            "waste_grades": bm[~bm["above_cutoff"]]["grade_au_gt"].tolist(),
+        },
+        "grade_tonnage": {
+            "cum_tonnes": ore.sort_values("grade_au_gt", ascending=False)["tonnage"].cumsum().tolist(),
+            "grades": ore.sort_values("grade_au_gt", ascending=False)["grade_au_gt"].tolist(),
         },
     }))
 

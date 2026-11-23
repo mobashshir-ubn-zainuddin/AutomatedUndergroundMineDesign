@@ -30,20 +30,23 @@ def optimize_stope_layout(
                 name=f"overlap_b{bid}"
             )
 
-    # Pillar constraints via shared blocks
-    checked = set()
-    for s in candidates:
-        for other_s in candidates:
-            if s["stope_id"] >= other_s["stope_id"]:
-                continue
-            pair = (s["stope_id"], other_s["stope_id"])
-            if pair in checked:
-                continue
-            checked.add(pair)
-            if set(s["block_ids"]) & set(other_s["block_ids"]):
+    # Pillar constraints for stopes sharing a block. Derived from the block
+    # index rather than every candidate pair, which is O(n²) and exhausts
+    # memory once most of the model is ore.
+    added = set()
+    for sids in block_to_stopes.values():
+        if len(sids) < 2:
+            continue
+        ordered = sorted(sids)
+        for i, a in enumerate(ordered):
+            for b in ordered[i + 1:]:
+                pair = (a, b)
+                if pair in added:
+                    continue
+                added.add(pair)
                 prob.addConstraint(
-                    x[s["stope_id"]] + x[other_s["stope_id"]] <= 1,
-                    name=f"pillar_{pair[0]}_{pair[1]}"
+                    x[a] + x[b] <= 1,
+                    name=f"pillar_{a}_{b}"
                 )
 
     solver = pulp.HiGHS(msg=False, timeLimit=time_limit)

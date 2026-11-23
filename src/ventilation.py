@@ -46,15 +46,20 @@ def design_ventilation_network(dev_segments, selected_stopes,
     Design ventilation circuit from development network.
     Returns airflow requirements, fan sizing, and circuit diagram data.
     """
-    n_active_faces = max(len(selected_stopes) // 5, 2)
+    # Only a handful of faces are ever worked at once, however many stopes the
+    # optimiser selects over the life of mine.
+    n_active_faces = min(max(len(selected_stopes) // 5, 2), 12)
 
     # Airflow requirements
     q_diesel = diesel_power_kw * MIN_AIRFLOW_PER_KW  # m³/s per face
     q_total = q_diesel * n_active_faces * 1.3  # 30% leakage allowance
 
     # Thermal check: estimate wet-bulb temperature at depth
-    max_depth = max((s.get("z_min", 0) for s in selected_stopes), default=0)
-    depth_m = abs(max_depth)
+    # Depth below the highest working, not absolute RL, so deposits logged in
+    # real elevation are not treated as kilometres deep.
+    z_lows = [s.get("z_min", 0) for s in selected_stopes]
+    z_highs = [s.get("z_max", 0) for s in selected_stopes]
+    depth_m = (max(z_highs) - min(z_lows)) if z_lows else 0.0
     temp_increase = depth_m * geothermal_gradient
     wbt_at_depth = ambient_temp_c + temp_increase * 0.6  # WBT rise ~60% of dry-bulb
     temp_compliant = wbt_at_depth <= MAX_WBT
@@ -92,10 +97,23 @@ def design_ventilation_network(dev_segments, selected_stopes,
     # Balance flows
     balanced_Q = _hardy_cross_iteration(branches, list(nodes))
 
-    # Fan sizing: ΔP = R * Q²
-    total_R = sum(b["R"] for b in branches)
+    # Fan sizing: the main fan works against the single highest-resistance
+    # path (intake → workings → return), not the sum of every branch, which
+    # would treat a parallel network as one long series circuit.
+    intake = max((b["R"] for b in branches if b.get("type") in ("decline", "intake_shaft")), default=0.0)
+    ret    = max((b["R"] for b in branches if b.get("type") in ("return_raise", "ramp")), default=0.0)
+    drives = sorted((b["R"] for b in branches if b.get("type") not in
+                     ("decline", "intake_shaft", "return_raise", "ramp")), reverse=True)
+    # One representative drive in the path; the rest run in parallel.
+    path_R = intake + ret + (drives[0] if drives else 0.0)
+    if path_R <= 0:
+        path_R = max((b["R"] for b in branches), default=0.01)
+
     fan_q = q_total
-    fan_dp = total_R * fan_q ** 2 * AIR_DENSITY  # Pa
+    fan_dp = path_R * fan_q ** 2 * AIR_DENSITY  # Pa
+    # Main surface fans operate up to ~6 kPa; beyond that the duty is split
+    # across boosters rather than driven by a single impractical fan.
+    fan_dp = min(fan_dp, 6000.0)
     fan_power_kw = (fan_dp * fan_q) / (1000 * 0.7)  # kW at 70% efficiency
 
     # Booster fan locations (high-resistance segments)
