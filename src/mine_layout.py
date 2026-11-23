@@ -23,7 +23,15 @@ def generate_development_network(
     all_y_max = max(s["y_max"] for s in selected_stopes)
 
     center_x = (all_x_min + all_x_max) / 2
-    center_y = all_y_min - 20  # decline on the footwall side
+    # Footwall drive, held close to the orebody so crosscuts stay short on
+    # deposits with a wide across-strike extent.
+    center_y = all_y_min - min(20.0, 0.05 * max(all_y_max - all_y_min, 1.0))
+
+    # Deposits logged in real RL sit above the default sea-level surface, which
+    # would make every depth negative and invert the decline. Collar the portal
+    # just above the orebody instead.
+    if surface_z <= all_z_max:
+        surface_z = all_z_max + level_spacing
 
     # Generate levels
     levels = []
@@ -83,10 +91,19 @@ def generate_development_network(
         })
         seg_id += 1
 
-        # Crosscuts from drive to each stope
+        # Crosscuts from the drive to the stopes. Stopes sharing an x-corridor
+        # are served by one crosscut driven to the furthest of them, and a
+        # stope spanning several levels is accessed from its own level only.
+        corridors: dict[float, float] = {}
         for s in level_stopes:
+            if not (lev_z - level_spacing / 2 <= (s["z_min"] + s["z_max"]) / 2 < lev_z + level_spacing / 2):
+                continue
+            stope_cx = round((s["x_min"] + s["x_max"]) / 2 / block_size) * block_size
             stope_cy = (s["y_min"] + s["y_max"]) / 2
-            stope_cx = (s["x_min"] + s["x_max"]) / 2
+            if abs(stope_cy - center_y) > abs(corridors.get(stope_cx, center_y) - center_y):
+                corridors[stope_cx] = stope_cy
+
+        for stope_cx, stope_cy in corridors.items():
             xcut_length = abs(stope_cy - center_y)
             segments.append({
                 "seg_id": seg_id,

@@ -116,7 +116,7 @@ def optimize_backfill(selected_stopes, block_size=5,
         if batched_vol >= batch_capacity_m3_day:
             schedule.append({
                 "period": period,
-                "stope_id": ",".join(batch_items),
+                "stope_id": ",".join(str(i) for i in batch_items),
                 "action": "fill",
                 "volume_m3": round(batched_vol, 1),
                 "type": "primary_fill",
@@ -131,7 +131,7 @@ def optimize_backfill(selected_stopes, block_size=5,
     if batch_items:
         schedule.append({
             "period": period,
-            "stope_id": ",".join(batch_items),
+            "stope_id": ",".join(str(i) for i in batch_items),
             "action": "fill",
             "volume_m3": round(batched_vol, 1),
             "type": "primary_fill",

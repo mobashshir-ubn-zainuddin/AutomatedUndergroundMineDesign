@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MineOptima — Automated Underground Mine Design</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v={{ asset_v }}">
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
@@ -606,6 +606,7 @@
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
           <button class="btn btn-primary" onclick="loadBolani()">📂 Load Bolani Dataset</button>
           <button class="btn btn-outline btn-sm" onclick="buildBolaniBlockModel()" id="btn-bolani-bm" disabled>🧊 Build Block Model</button>
+          <button class="btn btn-outline btn-sm" onclick="bolaniUseAsModel()" id="btn-bolani-activate" disabled style="border-color:#f59e0b;color:#f59e0b">⚡ Use as Active Model</button>
           <label style="font-size:0.82rem;color:var(--text-muted)">Block Size (m):
             <input type="number" id="p_bolani_bs" value="10" min="5" max="20" step="5" style="width:60px;margin-left:0.3rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.4rem">
           </label>
@@ -633,6 +634,24 @@
         <div class="chart-row">
           <div class="chart-container"><div id="chart-fe-sio2" style="height:360px"></div></div>
           <div class="chart-container"><div id="chart-fe-al2o3" style="height:360px"></div></div>
+        </div>
+
+        <!-- Interactive compound cross-plot -->
+        <div style="margin-top:1.5rem">
+          <h4 style="color:var(--text-muted);font-size:0.9rem;margin-bottom:0.5rem">🧪 Compound Cross-Plot</h4>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem">
+            <label style="font-size:0.82rem;color:var(--text-muted)">X axis:
+              <select id="p_scatter_x" onchange="updateCompoundScatter()" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.5rem;margin-left:0.3rem"></select>
+            </label>
+            <label style="font-size:0.82rem;color:var(--text-muted)">Y axis:
+              <select id="p_scatter_y" onchange="updateCompoundScatter()" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:0.2rem 0.5rem;margin-left:0.3rem"></select>
+            </label>
+            <label style="font-size:0.82rem;color:var(--text-muted)">
+              <input type="checkbox" id="p_scatter_trend" checked onchange="updateCompoundScatter()"> Trend line
+            </label>
+            <span id="scatter-corr" style="font-size:0.82rem;color:var(--text-muted)"></span>
+          </div>
+          <div class="chart-container"><div id="chart-compound-scatter" style="height:460px"></div></div>
         </div>
         <div class="chart-row">
           <div class="chart-container"><div id="chart-fe-depth" style="height:360px"></div></div>
@@ -848,6 +867,6 @@
   </p>
 </footer>
 
-<script src="/static/js/app.js"></script>
+<script src="/static/js/app.js?v={{ asset_v }}"></script>
 </body>
 </html>

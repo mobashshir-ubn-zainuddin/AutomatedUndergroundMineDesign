@@ -48,6 +48,12 @@ def load_drillhole_data():
         al2o3_val = row.get("al2o3", np.nan)
         al2o3 = float(al2o3_val) if al2o3_val not in ("na", "NA", "", None) else np.nan
 
+        p_val = row.get("p", np.nan)
+        p = float(p_val) if p_val not in ("na", "NA", "", None) else np.nan
+
+        s_val = row.get("s", np.nan)
+        s = float(s_val) if s_val not in ("na", "NA", "", None) else np.nan
+
         # Match lithocode
         geo_match = geology[
             (geology["bh_no"] == bh) &
@@ -59,7 +65,7 @@ def load_drillhole_data():
         records.append({
             "bh_no": bh, "from": row["from"], "to": row["to"],
             "x": x, "y": y, "z": z,
-            "fe": fe, "sio2": sio2, "al2o3": al2o3,
+            "fe": fe, "sio2": sio2, "al2o3": al2o3, "p": p, "s": s,
             "lithocode": litho,
             "interval_len": row["to"] - row["from"],
         })
