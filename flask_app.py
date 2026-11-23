@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, make_response
 from werkzeug.utils import secure_filename
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -59,7 +59,11 @@ def index():
         f = BASE_DIR / "static" / rel
         if f.exists():
             stamp = max(stamp, int(f.stat().st_mtime))
-    return render_template("index.html", asset_v=stamp)
+    resp = make_response(render_template("index.html", asset_v=stamp))
+    # The page carries the asset stamps, so it must never be served from cache
+    # or the browser keeps an old layout with new scripts.
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 
 @app.route("/healthz")
@@ -681,6 +685,99 @@ def api_bolani_block_model():
             "sio2": sample["sio2"].tolist(), "al2o3": sample["al2o3"].tolist(),
         },
     }))
+
+
+@app.route("/api/bolani/combined-csv", methods=["GET"])
+def api_bolani_combined_csv():
+    """Download the Bolani dataset as one CSV, also usable as an upload template."""
+    f = BASE_DIR / "bolani_data" / "bolani_combined.csv"
+    if not f.exists():
+        return jsonify({"error": "Combined CSV not found"}), 404
+    resp = make_response(f.read_text(encoding="utf-8"))
+    resp.headers["Content-Type"] = "text/csv"
+    resp.headers["Content-Disposition"] = "attachment; filename=bolani_combined.csv"
+    return resp
+
+
+@app.route("/api/csv/upload-combined", methods=["POST"])
+def api_csv_upload_combined():
+    """Load a single CSV that carries collar, assay and geology in one table."""
+    try:
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        df = pd.read_csv(f)
+        df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+
+        bh_col = next((c for c in ("bh_no", "bhno", "hole_id", "holeid", "drillhole", "bh")
+                       if c in df.columns), None)
+        if bh_col is None:
+            return jsonify({"error": "No drillhole ID column found (expected bh_no or hole_id)"}), 400
+        df = df.rename(columns={bh_col: "bh_no"})
+
+        # Composite coordinates, derived from the collar if not supplied directly
+        if not {"x", "y", "z"}.issubset(df.columns):
+            east = next((c for c in ("collar_east", "easting", "e") if c in df.columns), None)
+            north = next((c for c in ("collar_north", "northing", "n") if c in df.columns), None)
+            rl = next((c for c in ("collar_rl", "elevation", "rl") if c in df.columns), None)
+            if not (east and north and rl):
+                return jsonify({"error": "Need x/y/z or collar_east/collar_north/collar_rl columns"}), 400
+            if "from" not in df.columns or "to" not in df.columns:
+                return jsonify({"error": "Need from/to depth columns to place samples"}), 400
+            mid = (df["from"] + df["to"]) / 2
+            df["x"], df["y"], df["z"] = df[east], df[north], df[rl] - mid
+
+        for col in ("from", "to"):
+            if col not in df.columns:
+                df[col] = 0.0
+        if "lithocode" not in df.columns:
+            df["lithocode"] = "Unknown"
+        if "interval_len" not in df.columns:
+            df["interval_len"] = df["to"] - df["from"]
+
+        grade_cols = [c for c in ("fe", "sio2", "al2o3", "p", "s", "au", "cu")
+                      if c in df.columns and pd.to_numeric(df[c], errors="coerce").notna().any()]
+        if not grade_cols:
+            return jsonify({"error": "No numeric grade columns found"}), 400
+        for c in grade_cols:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+        primary = "fe" if "fe" in grade_cols else grade_cols[0]
+        if primary != "fe":
+            df["fe"] = df[primary]
+        for c in ("sio2", "al2o3"):
+            if c not in df.columns:
+                df[c] = np.nan
+
+        collar = (df.groupby("bh_no")
+                    .agg(e=("x", "first"), n=("y", "first"), z=("z", "max"))
+                    .reset_index())
+        collar["depth"] = df.groupby("bh_no")["to"].max().values
+
+        cache["bolani_composites"] = df
+        cache["bolani_collar"] = collar
+
+        stats = get_bolani_stats(df)
+        sample = df.dropna(subset=["x", "y", "z", "fe"])
+        sample = sample.sample(min(3000, len(sample)), random_state=42)
+
+        return jsonify(np_safe({
+            "n_drillholes": int(df["bh_no"].nunique()),
+            "n_composites": len(df),
+            "drillholes": [{"bh_no": b} for b in df["bh_no"].astype(str).unique().tolist()],
+            "columns": grade_cols,
+            "grade_col": primary,
+            "stats": stats,
+            "composites": {
+                "x": sample["x"].tolist(), "y": sample["y"].tolist(),
+                "z": sample["z"].tolist(), "fe": sample["fe"].tolist(),
+                "litho": sample["lithocode"].astype(str).tolist(),
+                "bh": sample["bh_no"].astype(str).tolist(),
+            },
+        }))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/bolani/scatter", methods=["POST"])

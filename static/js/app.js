@@ -33,6 +33,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById(tab.dataset.tab).classList.add('active');
+    tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
   });
 });
 
@@ -151,6 +152,49 @@ async function generateBlockModel() {
   }
 }
 
+function scrollTabs(dir) {
+  const bar = document.getElementById('tabBar');
+  if (bar) bar.scrollBy({ left: dir * Math.max(bar.clientWidth * 0.6, 200), behavior: 'smooth' });
+}
+
+// Load the bundled Bolani dataset and make it the active block model
+async function loadBolaniFromBlockTab() {
+  const st = document.getElementById('block-upload-status');
+  st.textContent = 'Loading Bolani dataset…';
+  try {
+    await apiCall('/api/bolani/load', {});
+    st.textContent = 'Building block model…';
+    await apiCall('/api/bolani/block-model', { block_size: 10 });
+    await bolaniUseAsModel();
+    st.textContent = '';
+  } catch (e) {
+    st.textContent = 'Error: ' + e.message;
+  }
+}
+
+// Upload one CSV carrying collar, assay and geology together
+async function uploadCombinedCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const st = document.getElementById('block-upload-status');
+  st.textContent = `Uploading ${file.name}…`;
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/csv/upload-combined', { method: 'POST', body: form });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+
+    st.textContent = `Loaded ${d.n_drillholes} holes · ${d.n_composites} samples · building block model…`;
+    await apiCall('/api/bolani/block-model', { block_size: 10 });
+    await bolaniUseAsModel();
+    st.innerHTML = `✅ ${d.n_drillholes} drillholes · ${d.n_composites} samples · compounds: ${d.columns.join(', ')}`;
+  } catch (e) {
+    st.textContent = 'Upload failed: ' + e.message;
+  }
+  input.value = '';
+}
+
 function updateBlockPlot() {
   if (!blockData) return;
   const mode = document.getElementById('blockViewMode').value;
@@ -163,9 +207,22 @@ function updateBlockPlot() {
   const unit  = isFe ? '% Fe' : ' g/t';
   const cbar  = isFe ? 'Fe (%)' : 'Grade (g/t)';
   const scale = isFe ? 'RdYlGn' : 'YlOrRd';
-  // Transparent full block volume, so interior grade structure stays visible
-  const opacity = mode === 'all' ? 0.28 : 0.55;
-  const size    = isFe ? 4.5 : 2.5;
+  const size  = isFe ? 4.5 : 2.5;
+
+  // Drillhole and transparency controls only apply to a drillhole-backed model.
+  // Looked up defensively so a cached page without them still renders.
+  const hasDH = !!(blockData.drillholes && blockData.drillholes.x.length);
+  const dhLabel = document.getElementById('lbl-show-dh');
+  const opLabel = document.getElementById('lbl-block-opacity');
+  if (dhLabel) dhLabel.style.display = hasDH ? '' : 'none';
+  if (opLabel) opLabel.style.display = hasDH ? '' : 'none';
+
+  const dhToggle = document.getElementById('p_show_drillholes');
+  const showDH = hasDH && (!dhToggle || dhToggle.checked);
+
+  const opacitySlider = document.getElementById('p_block_opacity');
+  const opacity = (hasDH && opacitySlider) ? (+opacitySlider.value / 100)
+                                           : (mode === 'all' ? 0.28 : 0.55);
 
   const traces = [{
     type: 'scatter3d', mode: 'markers',
@@ -180,16 +237,33 @@ function updateBlockPlot() {
     name: 'Block Model',
   }];
 
-  // Overlay the drillhole composites on the Bolani block model
-  if (isFe && blockData.drillholes && blockData.drillholes.x.length) {
+  // Overlay the drillhole composites on the block model
+  if (showDH) {
     const dh = blockData.drillholes;
+    const cmin = Math.min(...d.grade), cmax = Math.max(...d.grade);
+
+    // Hole traces, so each drillhole reads as a line rather than loose points
+    const byHole = {};
+    dh.x.forEach((_, i) => {
+      (byHole[dh.bh[i]] = byHole[dh.bh[i]] || []).push(i);
+    });
+    Object.entries(byHole).forEach(([bh, idx]) => {
+      idx.sort((a, b) => dh.z[b] - dh.z[a]);
+      traces.push({
+        type: 'scatter3d', mode: 'lines',
+        x: idx.map(i => dh.x[i]), y: idx.map(i => dh.y[i]), z: idx.map(i => dh.z[i]),
+        line: { color: '#64748b', width: 3 },
+        hoverinfo: 'skip', showlegend: false,
+      });
+    });
+
     traces.push({
       type: 'scatter3d', mode: 'markers',
       x: dh.x, y: dh.y, z: dh.z,
       marker: {
-        size: 3.2, color: dh.fe, colorscale: 'RdYlGn', opacity: 1.0,
+        size: 3.6, color: dh.fe, colorscale: scale, opacity: 1.0,
         showscale: false, line: { color: '#0f172a', width: 0.5 },
-        cmin: Math.min(...d.grade), cmax: Math.max(...d.grade),
+        cmin, cmax,
       },
       text: dh.fe.map((f, i) => `${dh.bh[i]}<br>Fe: ${f.toFixed(2)}%<br>${dh.litho[i]}`),
       hoverinfo: 'text',
@@ -199,9 +273,9 @@ function updateBlockPlot() {
 
   Plotly.newPlot('chart-block3d', traces, {
     ...plotlyDarkLayout, scene: plotly3dScene, height: 600,
-    margin: { l: 0, r: 0, t: 10, b: 0 },
-    showlegend: isFe,
-    legend: { x: 0.02, y: 0.98, bgcolor: 'rgba(15,23,42,0.7)' },
+    margin: { l: 0, r: 0, t: 40, b: 0 },
+    showlegend: showDH,
+    legend: { x: 0.01, y: 0.99, yanchor: 'top', bgcolor: 'rgba(15,23,42,0.75)' },
   }, plotlyConfig);
 }
 
@@ -297,7 +371,8 @@ async function runOptimization() {
     });
 
     Plotly.newPlot('chart-stope3d', traces, {
-      ...plotlyDarkLayout, scene: plotly3dScene, height: 650, margin: { l: 0, r: 0, t: 10, b: 0 }, showlegend: true, legend: { bgcolor: 'rgba(0,0,0,0)' },
+      ...plotlyDarkLayout, scene: plotly3dScene, height: 650, margin: { l: 0, r: 0, t: 40, b: 0 }, showlegend: true,
+      legend: { bgcolor: 'rgba(15,23,42,0.75)', x: 0.01, y: 0.99, yanchor: 'top' },
     }, plotlyConfig);
 
     // Stope table
@@ -367,7 +442,8 @@ async function loadMineLayout() {
     });
 
     Plotly.newPlot('chart-layout3d', traces, {
-      ...plotlyDarkLayout, scene: plotly3dScene, height: 650, margin: { l: 0, r: 0, t: 10, b: 0 }, legend: { bgcolor: 'rgba(0,0,0,0)' },
+      ...plotlyDarkLayout, scene: plotly3dScene, height: 650, margin: { l: 0, r: 0, t: 40, b: 0 },
+      legend: { bgcolor: 'rgba(15,23,42,0.75)', x: 0.01, y: 0.99, yanchor: 'top' },
     }, plotlyConfig);
 
     const thead = document.querySelector('#layout-table thead');
@@ -471,11 +547,13 @@ async function runMonteCarlo() {
     data.tornado.forEach(t => {
       tTraces.push({
         y: [t.variable], x: [t.npv_high - data.base_npv], type: 'bar', orientation: 'h',
-        marker: { color: '#10b981' }, showlegend: false, text: [fmt(t.npv_high)], textposition: 'auto', textfont: { size: 10 },
+        marker: { color: '#10b981' }, showlegend: false, text: [fmt(t.npv_high)],
+        textposition: 'inside', insidetextanchor: 'middle', cliponaxis: false, textfont: { size: 10, color: '#f8fafc' },
       });
       tTraces.push({
         y: [t.variable], x: [t.npv_low - data.base_npv], type: 'bar', orientation: 'h',
-        marker: { color: '#ef4444' }, showlegend: false, text: [fmt(t.npv_low)], textposition: 'auto', textfont: { size: 10 },
+        marker: { color: '#ef4444' }, showlegend: false, text: [fmt(t.npv_low)],
+        textposition: 'inside', insidetextanchor: 'middle', cliponaxis: false, textfont: { size: 10, color: '#f8fafc' },
       });
     });
     Plotly.newPlot('chart-tornado', tTraces, {
